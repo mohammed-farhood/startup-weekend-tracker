@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Details - Mobile App Alpha</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500;600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <a href="index.html" class="back-link">← Back</a>
+            <div class="user-avatars">
+                <div class="avatar me">M</div>
+                <div class="avatar friend">F</div>
+            </div>
+        </header>
+
+        <section class="project-header">
+            <h1>Mobile App Alpha</h1>
+            <p class="project-meta">Due: Dec 1, 2026</p>
+            <div class="progress-section">
+                <div class="progress-labels">
+                    <span>Overall Progress</span>
+                    <span>65%</span>
+                </div>
+                <div class="progress-bar-container large">
+                    <div class="progress-bar" style="width: 65%;"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="project-tasks">
+            <h2>Tasks</h2>
+            <ul class="todo-list" id="projectTodoList">
+                <li class="todo-item completed">
+                    <label class="todo-label">
+                        <input type="checkbox" class="todo-checkbox" checked>
+                        <span class="custom-checkbox"></span>
+                        <span class="todo-text">Setup Repository</span>
+                    </label>
+                    <span class="assignee tag-me">Me</span>
+                </li>
+                <li class="todo-item">
+                    <label class="todo-label">
+                        <input type="checkbox" class="todo-checkbox">
+                        <span class="custom-checkbox"></span>
+                        <span class="todo-text">Create UI wireframes</span>
+                    </label>
+                    <span class="assignee tag-friend">Friend</span>
+                </li>
+                <li class="todo-item">
+                    <label class="todo-label">
+                        <input type="checkbox" class="todo-checkbox">
+                        <span class="custom-checkbox"></span>
+                        <span class="todo-text">Implement login screen</span>
+                    </label>
+                    <span class="assignee tag-me">Me</span>
+                </li>
+            </ul>
+        </section>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
