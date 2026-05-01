@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500;600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
+
     <!-- Login Modal -->
     <div id="loginOverlay" class="login-overlay">
         <div class="login-card">
@@ -24,11 +25,11 @@
         </div>
     </div>
 
-    <!-- Add Event Modal -->
+    <!-- Add/Edit Event Modal -->
     <div id="eventModal" class="modal-overlay" style="display: none;">
         <div class="modal-card">
-            <h3>Add New Event</h3>
-            <input type="text" id="eventTitle" placeholder="Event Title">
+            <h3>Add Event</h3>
+            <input type="text" id="eventTitle" placeholder="Event title">
             <input type="date" id="eventDate">
             <div class="modal-actions">
                 <button id="cancelEventBtn" class="text-btn">Cancel</button>
@@ -37,6 +38,78 @@
         </div>
     </div>
 
+    <!-- Add/Edit Task Modal -->
+    <div id="taskModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <h3 id="taskModalTitle">Add Task</h3>
+            <input type="text" id="taskTextInput" placeholder="Task description">
+            <select id="taskAssigneeSelect" class="select-input">
+                <option value="Mohammed">Mohammed</option>
+                <option value="Eyad">Eyad</option>
+            </select>
+            <input type="hidden" id="taskEditId" value="">
+            <div class="modal-actions">
+                <button id="cancelTaskBtn" class="text-btn">Cancel</button>
+                <button id="saveTaskBtn" class="primary-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Subtask Modal -->
+    <div id="subtaskModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <h3>Add Subtask</h3>
+            <input type="text" id="subtaskTextInput" placeholder="Subtask description">
+            <input type="hidden" id="subtaskParentId" value="">
+            <div class="modal-actions">
+                <button id="cancelSubtaskBtn" class="text-btn">Cancel</button>
+                <button id="saveSubtaskBtn" class="primary-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Day Detail Modal -->
+    <div id="dayDetailModal" class="modal-overlay" style="display: none;">
+        <div class="day-detail-card">
+            <div class="day-detail-header">
+                <h3 id="dayDetailTitle"></h3>
+                <button id="closeDayDetail" class="close-btn">✕</button>
+            </div>
+            <div class="day-detail-body">
+
+                <div class="day-detail-section">
+                    <div class="day-section-header">
+                        <h4>Events</h4>
+                        <button class="icon-btn small" id="addDayEventBtn">+</button>
+                    </div>
+                    <div id="dayEventAddRow" class="add-inline-row" style="display:none;">
+                        <input type="text" id="dayEventInput" class="inline-input" placeholder="Event name...">
+                        <button id="saveDayEventBtn" class="inline-save-btn">Save</button>
+                    </div>
+                    <div id="dayEventsList"></div>
+                    <p id="dayNoEvents" class="empty-text" style="display:none;">No events scheduled.</p>
+                </div>
+
+                <div class="day-detail-divider"></div>
+
+                <div class="day-detail-section">
+                    <div class="day-section-header">
+                        <h4>To-Do</h4>
+                        <button class="icon-btn small" id="addDayTodoBtn">+</button>
+                    </div>
+                    <div id="dayTodoAddRow" class="add-inline-row" style="display:none;">
+                        <input type="text" id="dayTodoInput" class="inline-input" placeholder="New task...">
+                        <button id="saveDayTodoBtn" class="inline-save-btn">Save</button>
+                    </div>
+                    <ul id="dayTodoList" class="todo-list day-todo-list"></ul>
+                    <p id="dayNoTodos" class="empty-text" style="display:none;">No tasks for this day.</p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
     <div class="app-container" style="display: none;" id="mainApp">
         <header class="app-header">
             <h1>Tracker</h1>
@@ -46,76 +119,72 @@
             </div>
         </header>
 
-        <section class="calendar-section">
-            <div class="section-header">
-                <h2>Schedule</h2>
-                <button id="addEventBtn" class="icon-btn">+</button>
+        <div class="main-grid">
+            <!-- Left Column: Calendar & Events -->
+            <div class="left-col">
+                <section class="calendar-section">
+                    <div class="section-header">
+                        <h2>Events</h2>
+                        <button id="addEventBtn" class="icon-btn">+</button>
+                    </div>
+                    <div class="calendar-container">
+                        <div class="calendar-nav">
+                            <button id="prevMonthBtn" class="cal-nav-btn">‹</button>
+                            <span id="calMonthLabel" class="cal-month-label"></span>
+                            <button id="nextMonthBtn" class="cal-nav-btn">›</button>
+                        </div>
+                        <div class="calendar-header">
+                            <div class="day-name">Sat</div>
+                            <div class="day-name">Sun</div>
+                            <div class="day-name">Mon</div>
+                            <div class="day-name">Tue</div>
+                            <div class="day-name">Wed</div>
+                            <div class="day-name">Thu</div>
+                            <div class="day-name highlighted">Fri</div>
+                        </div>
+                        <div class="calendar-grid" id="calendarGrid"></div>
+                    </div>
+                    <div class="events-list" id="eventsList"></div>
+                </section>
             </div>
-            <div class="calendar-container">
-                <div class="calendar-header">
-                    <div class="day-name">Sat</div>
-                    <div class="day-name">Sun</div>
-                    <div class="day-name">Mon</div>
-                    <div class="day-name">Tue</div>
-                    <div class="day-name">Wed</div>
-                    <div class="day-name">Thu</div>
-                    <div class="day-name highlighted">Fri</div>
-                </div>
-                <div class="calendar-grid" id="calendarGrid">
-                    <!-- Days will be generated by JS -->
-                </div>
-            </div>
-            <div class="events-list" id="eventsList">
-                <!-- Events generated by JS -->
-            </div>
-        </section>
 
-        <section class="projects-section">
-            <h2>Active Projects</h2>
-            <div class="project-list">
-                <a href="project.html" class="project-card">
-                    <div class="project-info">
-                        <h3>Mobile App Alpha</h3>
-                        <p>65% Complete</p>
+            <!-- Right Column: Projects & Tasks -->
+            <div class="right-col">
+                <section class="projects-section">
+                    <h2>Active Projects</h2>
+                    <div class="project-list">
+                        <a href="project.html" class="project-card">
+                            <div class="project-info">
+                                <h3>Mobile App Alpha</h3>
+                                <p>65% Complete</p>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" style="width: 65%;"></div>
+                            </div>
+                        </a>
+                        <a href="project.html" class="project-card">
+                            <div class="project-info">
+                                <h3>Marketing Site</h3>
+                                <p>30% Complete</p>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" style="width: 30%;"></div>
+                            </div>
+                        </a>
                     </div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" style="width: 65%;"></div>
-                    </div>
-                </a>
-                <a href="project.html" class="project-card">
-                    <div class="project-info">
-                        <h3>Marketing Site</h3>
-                        <p>30% Complete</p>
-                    </div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" style="width: 30%;"></div>
-                    </div>
-                </a>
-            </div>
-        </section>
+                </section>
 
-        <section class="todo-section">
-            <h2>Quick Tasks</h2>
-            <ul class="todo-list" id="todoList">
-                <li class="todo-item">
-                    <label class="todo-label">
-                        <input type="checkbox" class="todo-checkbox">
-                        <span class="custom-checkbox"></span>
-                        <span class="todo-text">Draft email copy</span>
-                    </label>
-                    <span class="assignee tag-mohammed">Mohammed</span>
-                </li>
-                <li class="todo-item">
-                    <label class="todo-label">
-                        <input type="checkbox" class="todo-checkbox">
-                        <span class="custom-checkbox"></span>
-                        <span class="todo-text">Buy domain name</span>
-                    </label>
-                    <span class="assignee tag-eyad">Eyad</span>
-                </li>
-            </ul>
-        </section>
+                <section class="todo-section">
+                    <div class="section-header">
+                        <h2>Quick Tasks</h2>
+                        <button id="addTaskBtn" class="icon-btn">+</button>
+                    </div>
+                    <ul class="todo-list" id="todoList"></ul>
+                </section>
+            </div>
+        </div>
     </div>
+
     <script src="app.js"></script>
 </body>
 </html>
