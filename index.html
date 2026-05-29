@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Project Tracker Dashboard</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500;600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,300;1,400;1,500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -25,7 +25,26 @@
         </div>
     </div>
 
-    <!-- Add/Edit Event Modal -->
+    <!-- Add Project Modal -->
+    <div id="addProjectModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <h3>New Project</h3>
+            <input type="text" id="projectNameInput" placeholder="Project name">
+            <div class="project-color-picker" id="projectColorPicker">
+                <button class="color-dot-btn active" data-color="#C2620E" style="background:#C2620E" title="Amber"></button>
+                <button class="color-dot-btn" data-color="#7C3AED" style="background:#7C3AED" title="Purple"></button>
+                <button class="color-dot-btn" data-color="#059669" style="background:#059669" title="Green"></button>
+                <button class="color-dot-btn" data-color="#2563EB" style="background:#2563EB" title="Blue"></button>
+                <button class="color-dot-btn" data-color="#E11D48" style="background:#E11D48" title="Rose"></button>
+            </div>
+            <div class="modal-actions">
+                <button id="cancelAddProjectBtn" class="text-btn">Cancel</button>
+                <button id="saveAddProjectBtn" class="primary-btn">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Event Modal -->
     <div id="eventModal" class="modal-overlay" style="display: none;">
         <div class="modal-card">
             <h3>Add Event</h3>
@@ -46,6 +65,12 @@
             <select id="taskAssigneeSelect" class="select-input">
                 <option value="Mohammed">Mohammed</option>
                 <option value="Eyad">Eyad</option>
+                <option value="Yusuf">Yusuf</option>
+            </select>
+            <select id="taskProjectSelect" class="select-input">
+                <option value="none">No project</option>
+                <option value="mobile">Mobile App Alpha</option>
+                <option value="marketing">Marketing Site</option>
             </select>
             <input type="hidden" id="taskEditId" value="">
             <div class="modal-actions">
@@ -76,35 +101,31 @@
                 <button id="closeDayDetail" class="close-btn">✕</button>
             </div>
             <div class="day-detail-body">
-
                 <div class="day-detail-section">
                     <div class="day-section-header">
                         <h4>Events</h4>
                         <button class="icon-btn small" id="addDayEventBtn">+</button>
                     </div>
                     <div id="dayEventAddRow" class="add-inline-row" style="display:none;">
-                        <input type="text" id="dayEventInput" class="inline-input" placeholder="Event name...">
+                        <input type="text" id="dayEventInput" class="inline-input" placeholder="Event name…">
                         <button id="saveDayEventBtn" class="inline-save-btn">Save</button>
                     </div>
                     <div id="dayEventsList"></div>
                     <p id="dayNoEvents" class="empty-text" style="display:none;">No events scheduled.</p>
                 </div>
-
                 <div class="day-detail-divider"></div>
-
                 <div class="day-detail-section">
                     <div class="day-section-header">
                         <h4>To-Do</h4>
                         <button class="icon-btn small" id="addDayTodoBtn">+</button>
                     </div>
                     <div id="dayTodoAddRow" class="add-inline-row" style="display:none;">
-                        <input type="text" id="dayTodoInput" class="inline-input" placeholder="New task...">
+                        <input type="text" id="dayTodoInput" class="inline-input" placeholder="New task…">
                         <button id="saveDayTodoBtn" class="inline-save-btn">Save</button>
                     </div>
                     <ul id="dayTodoList" class="todo-list day-todo-list"></ul>
                     <p id="dayNoTodos" class="empty-text" style="display:none;">No tasks for this day.</p>
                 </div>
-
             </div>
         </div>
     </div>
@@ -113,37 +134,58 @@
     <div class="app-container" style="display: none;" id="mainApp">
         <header class="app-header">
             <h1>Tracker</h1>
-            <div class="user-avatars">
-                <div class="avatar mohammed" title="Mohammed">M</div>
-                <div class="avatar eyad" title="Eyad">E</div>
+            <div class="header-right">
+                <div class="user-avatars">
+                    <div class="avatar mohammed" title="Mohammed">M</div>
+                    <div class="avatar eyad" title="Eyad">E</div>
+                    <div class="avatar yusuf" title="Yusuf">Y</div>
+                </div>
+                <button id="logoutBtn" class="logout-btn">Sign out</button>
             </div>
         </header>
 
         <div class="main-grid">
-            <!-- Left Column: Calendar & Events -->
+            <!-- Left Column: Schedule -->
             <div class="left-col">
                 <section class="calendar-section">
                     <div class="section-header">
-                        <h2>Events</h2>
+                        <h2>Schedule</h2>
                         <button id="addEventBtn" class="icon-btn">+</button>
                     </div>
-                    <div class="calendar-container">
-                        <div class="calendar-nav">
+
+                    <!-- Week Strip -->
+                    <div class="week-block">
+                        <div class="week-nav">
+                            <button id="prevWeekBtn" class="cal-nav-btn">‹</button>
+                            <span id="weekLabel" class="cal-month-label"></span>
+                            <button id="nextWeekBtn" class="cal-nav-btn">›</button>
+                        </div>
+                        <div class="week-strip" id="weekStrip"></div>
+                    </div>
+
+                    <!-- Monthly Calendar (widget — tap to expand) -->
+                    <div class="calendar-container" id="calendarContainer">
+                        <div class="calendar-nav" id="calendarNavBar">
                             <button id="prevMonthBtn" class="cal-nav-btn">‹</button>
                             <span id="calMonthLabel" class="cal-month-label"></span>
                             <button id="nextMonthBtn" class="cal-nav-btn">›</button>
+                            <button id="calToggleBtn" class="cal-toggle-btn" title="Show calendar">▾</button>
                         </div>
-                        <div class="calendar-header">
-                            <div class="day-name">Sat</div>
-                            <div class="day-name">Sun</div>
-                            <div class="day-name">Mon</div>
-                            <div class="day-name">Tue</div>
-                            <div class="day-name">Wed</div>
-                            <div class="day-name">Thu</div>
-                            <div class="day-name highlighted">Fri</div>
+                        <div class="calendar-expand" id="calendarExpand">
+                            <div class="calendar-header">
+                                <div class="day-name">Sat</div>
+                                <div class="day-name">Sun</div>
+                                <div class="day-name">Mon</div>
+                                <div class="day-name">Tue</div>
+                                <div class="day-name">Wed</div>
+                                <div class="day-name">Thu</div>
+                                <div class="day-name highlighted">Fri</div>
+                            </div>
+                            <div class="calendar-grid" id="calendarGrid"></div>
                         </div>
-                        <div class="calendar-grid" id="calendarGrid"></div>
                     </div>
+
+                    <!-- Upcoming Events -->
                     <div class="events-list" id="eventsList"></div>
                 </section>
             </div>
@@ -151,27 +193,11 @@
             <!-- Right Column: Projects & Tasks -->
             <div class="right-col">
                 <section class="projects-section">
-                    <h2>Active Projects</h2>
-                    <div class="project-list">
-                        <a href="project.html" class="project-card">
-                            <div class="project-info">
-                                <h3>Mobile App Alpha</h3>
-                                <p>65% Complete</p>
-                            </div>
-                            <div class="progress-bar-container">
-                                <div class="progress-bar" style="width: 65%;"></div>
-                            </div>
-                        </a>
-                        <a href="project.html" class="project-card">
-                            <div class="project-info">
-                                <h3>Marketing Site</h3>
-                                <p>30% Complete</p>
-                            </div>
-                            <div class="progress-bar-container">
-                                <div class="progress-bar" style="width: 30%;"></div>
-                            </div>
-                        </a>
+                    <div class="section-header">
+                        <h2>Active Projects</h2>
+                        <button id="addProjectBtn" class="icon-btn">+</button>
                     </div>
+                    <div class="project-list" id="projectList"></div>
                 </section>
 
                 <section class="todo-section">
@@ -185,6 +211,8 @@
         </div>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

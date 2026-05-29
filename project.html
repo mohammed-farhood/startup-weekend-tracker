@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Project Details - Mobile App Alpha</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500;600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,300;1,400;1,500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- Login Modal -->
@@ -24,59 +24,104 @@
         </div>
     </div>
 
+    <!-- Add/Edit Project Task Modal -->
+    <div id="projectTaskModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <h3 id="projectTaskModalTitle">Add Task</h3>
+            <input type="text" id="projectTaskText" placeholder="Task description">
+            <select id="projectTaskAssignee" class="select-input">
+                <option value="Mohammed">Mohammed</option>
+                <option value="Eyad">Eyad</option>
+                <option value="Yusuf">Yusuf</option>
+            </select>
+            <input type="hidden" id="projectTaskEditId" value="">
+            <div class="modal-actions">
+                <button id="cancelProjectTaskBtn" class="text-btn">Cancel</button>
+                <button id="saveProjectTaskBtn" class="primary-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
     <div class="app-container" style="display: none;" id="mainApp">
         <header class="app-header">
             <a href="index.html" class="back-link">← Back</a>
-            <div class="user-avatars">
-                <div class="avatar mohammed" title="Mohammed">M</div>
-                <div class="avatar eyad" title="Eyad">E</div>
+            <div class="header-right">
+                <div class="user-avatars">
+                    <div class="avatar mohammed" title="Mohammed">M</div>
+                    <div class="avatar eyad" title="Eyad">E</div>
+                    <div class="avatar yusuf" title="Yusuf">Y</div>
+                </div>
+                <button id="logoutBtn" class="logout-btn">Sign out</button>
             </div>
         </header>
 
         <section class="project-header">
             <h1>Mobile App Alpha</h1>
-            <p class="project-meta">Due: Dec 1, 2026</p>
+            <p class="project-meta">Loading…</p>
             <div class="progress-section">
                 <div class="progress-labels">
                     <span>Overall Progress</span>
-                    <span>65%</span>
+                    <span>0%</span>
                 </div>
                 <div class="progress-bar-container large">
-                    <div class="progress-bar" style="width: 65%;"></div>
+                    <div class="progress-bar" style="width: 0%;"></div>
                 </div>
             </div>
         </section>
 
         <section class="project-tasks">
-            <h2>Tasks</h2>
-            <ul class="todo-list" id="projectTodoList">
-                <li class="todo-item completed">
-                    <label class="todo-label">
-                        <input type="checkbox" class="todo-checkbox" checked>
-                        <span class="custom-checkbox"></span>
-                        <span class="todo-text">Setup Repository</span>
-                    </label>
-                    <span class="assignee tag-mohammed">Mohammed</span>
-                </li>
-                <li class="todo-item">
-                    <label class="todo-label">
-                        <input type="checkbox" class="todo-checkbox">
-                        <span class="custom-checkbox"></span>
-                        <span class="todo-text">Create UI wireframes</span>
-                    </label>
-                    <span class="assignee tag-eyad">Eyad</span>
-                </li>
-                <li class="todo-item">
-                    <label class="todo-label">
-                        <input type="checkbox" class="todo-checkbox">
-                        <span class="custom-checkbox"></span>
-                        <span class="todo-text">Implement login screen</span>
-                    </label>
-                    <span class="assignee tag-mohammed">Mohammed</span>
-                </li>
-            </ul>
+            <div class="section-header">
+                <h2>Tasks</h2>
+                <button id="addProjectTaskBtn" class="icon-btn">+</button>
+            </div>
+            <ul class="todo-list" id="projectTodoList"></ul>
+        </section>
+
+        <!-- Time Tracker -->
+        <section class="time-tracker-section">
+            <div class="section-header">
+                <h2>Time Tracker</h2>
+                <button class="text-btn timer-collapse-toggle" id="timerCollapseBtn">hide</button>
+            </div>
+            <div id="timerBody">
+                <div class="time-totals-row">
+                    <div class="time-total-block time-block-total">
+                        <div class="time-block-label">Total</div>
+                        <div class="time-block-value" id="totalProjectTime">—</div>
+                    </div>
+                    <div class="time-total-block">
+                        <div class="time-block-label">Mohammed</div>
+                        <div class="time-block-value" id="mohammedTime">—</div>
+                    </div>
+                    <div class="time-total-block">
+                        <div class="time-block-label">Eyad</div>
+                        <div class="time-block-value" id="eyadTime">—</div>
+                    </div>
+                </div>
+
+                <div class="partner-status" id="partnerStatus" style="display:none;">
+                    <span class="partner-status-dot"></span>
+                    <span id="partnerStatusText"></span>
+                </div>
+
+                <div class="timer-control-area">
+                    <div id="timerIdlePanel" class="timer-idle-panel">
+                        <select id="timerTaskSelect" class="select-input timer-select">
+                            <option value="">No specific task</option>
+                        </select>
+                        <button id="startTimerBtn" class="start-timer-btn">▶ Start Timer</button>
+                    </div>
+                    <div id="timerRunningPanel" class="timer-running-panel" style="display:none;">
+                        <div class="timer-clock" id="timerClock">00:00:00</div>
+                        <div class="timer-current-task" id="timerRunningTask"></div>
+                        <button id="stopTimerBtn" class="stop-timer-btn">■ Stop</button>
+                    </div>
+                </div>
+            </div>
         </section>
     </div>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
