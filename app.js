@@ -628,6 +628,28 @@ document.addEventListener('DOMContentLoaded', () => {
     let _renderProjectTasks = null; // hoisted reference so init() can call it
     const projectTodoList = document.getElementById('projectTodoList');
     if (projectTodoList) {
+        // Load active project info and set page title
+        const activeProj = JSON.parse(sessionStorage.getItem('activeProject'));
+        if (activeProj) {
+            const h1 = document.querySelector('.project-header h1');
+            if (h1) h1.textContent = activeProj.name;
+            const bar = document.querySelector('.project-header .progress-bar');
+            if (bar) bar.style.background = activeProj.color;
+        }
+
+        // Delete whole project button
+        document.getElementById('deleteProjectBtn')?.addEventListener('click', () => {
+            const proj = JSON.parse(sessionStorage.getItem('activeProject'));
+            if (!proj) return;
+            if (!confirm(`Delete "${proj.name}" and all its tasks?`)) return;
+            projects = projects.filter(p => p.id !== proj.id);
+            saveProjects();
+            projectTasks = [];
+            saveProjectTasks();
+            sessionStorage.removeItem('activeProject');
+            window.location.href = 'index.html';
+        });
+
         let projectTasks = JSON.parse(localStorage.getItem('projectTasks')) || [];
         const saveProjectTasks = () => {
             localStorage.setItem('projectTasks', JSON.stringify(projectTasks));

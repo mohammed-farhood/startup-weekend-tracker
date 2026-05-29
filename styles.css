@@ -1020,6 +1020,30 @@ input::placeholder { color: var(--text-faint); }
   margin-bottom: 56px;
 }
 
+.project-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.delete-project-btn {
+  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  color: #E11D48;
+  background: transparent;
+  border: 1px solid #E11D4833;
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms;
+}
+.delete-project-btn:hover {
+  background: #E11D4812;
+  border-color: #E11D4866;
+}
+
 .project-header h1 {
   font-size: clamp(2.25rem, 6vw, 3.25rem);
   font-weight: 300;
