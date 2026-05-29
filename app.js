@@ -773,15 +773,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const TIME_KEY = 'projectTimeData';
 
         function getCurrentUser() { return localStorage.getItem('currentUser'); }
-        function getPartnerUser() {
+        const ALL_USERS = ['MOHAMMED', 'EYAD', 'YUSUF'];
+
+        function getOtherUsers() {
             const u = getCurrentUser();
-            return u === 'MOHAMMED' ? 'EYAD' : 'MOHAMMED';
+            return ALL_USERS.filter(x => x !== u);
         }
 
         function loadTimeData() {
             const raw = JSON.parse(localStorage.getItem(TIME_KEY));
-            if (!raw) return { sessions: [], activeSessions: { MOHAMMED: null, EYAD: null } };
-            if (!raw.activeSessions) raw.activeSessions = { MOHAMMED: null, EYAD: null };
+            if (!raw) return { sessions: [], activeSessions: { MOHAMMED: null, EYAD: null, YUSUF: null } };
+            if (!raw.activeSessions) raw.activeSessions = { MOHAMMED: null, EYAD: null, YUSUF: null };
+            if (!raw.activeSessions.YUSUF) raw.activeSessions.YUSUF = null;
             return raw;
         }
         function saveTimeData(d) {
@@ -812,7 +815,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function getTaskTotal(d, taskId) {
             const done = d.sessions.filter(s => s.taskId == taskId).reduce((a, s) => a + s.duration, 0);
             let act = 0;
-            for (const u of ['MOHAMMED', 'EYAD']) {
+            for (const u of ALL_USERS) {
                 const a = d.activeSessions[u];
                 if (a && a.taskId == taskId) act += (Date.now() - a.startTime) / 1000;
             }
@@ -866,13 +869,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const mSec = getUserTotal(d, 'MOHAMMED');
             const eSec = getUserTotal(d, 'EYAD');
-            const tSec = mSec + eSec;
+            const ySec = getUserTotal(d, 'YUSUF');
+            const tSec = mSec + eSec + ySec;
             const totalEl = document.getElementById('totalProjectTime');
             const mEl     = document.getElementById('mohammedTime');
             const eEl     = document.getElementById('eyadTime');
+            const yEl     = document.getElementById('yusufTime');
             if (totalEl) totalEl.textContent = tSec >= 1 ? fmtDuration(tSec) : '—';
             if (mEl)     mEl.textContent     = mSec >= 1 ? fmtDuration(mSec) : '—';
             if (eEl)     eEl.textContent     = eSec >= 1 ? fmtDuration(eSec) : '—';
+            if (yEl)     yEl.textContent     = ySec >= 1 ? fmtDuration(ySec) : '—';
 
             const idlePanel = document.getElementById('timerIdlePanel');
             const runPanel  = document.getElementById('timerRunningPanel');
@@ -890,16 +896,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 populateTimerSelect();
             }
 
-            const partnerUser   = user ? getPartnerUser() : null;
-            const partnerActive = partnerUser ? d.activeSessions[partnerUser] : null;
-            const partnerEl     = document.getElementById('partnerStatus');
-            const partnerTxtEl  = document.getElementById('partnerStatusText');
+            const nameMap = { MOHAMMED: 'Mohammed', EYAD: 'Eyad', YUSUF: 'Yusuf' };
+            const partnerEl    = document.getElementById('partnerStatus');
+            const partnerTxtEl = document.getElementById('partnerStatusText');
             if (partnerEl) {
-                if (partnerActive) {
-                    const pName   = partnerUser === 'MOHAMMED' ? 'Mohammed' : 'Eyad';
-                    const elapsed = (Date.now() - partnerActive.startTime) / 1000;
-                    const tPart   = partnerActive.taskName ? ` on "${partnerActive.taskName}"` : '';
-                    if (partnerTxtEl) partnerTxtEl.textContent = `${pName} is working${tPart} · ${fmtDuration(elapsed)}`;
+                const activeOthers = user ? getOtherUsers()
+                    .map(u => ({ u, a: d.activeSessions[u] }))
+                    .filter(x => x.a) : [];
+                if (activeOthers.length > 0) {
+                    partnerTxtEl.textContent = activeOthers.map(({ u, a }) => {
+                        const elapsed = (Date.now() - a.startTime) / 1000;
+                        const tPart = a.taskName ? ` on "${a.taskName}"` : '';
+                        return `${nameMap[u]} is working${tPart} · ${fmtDuration(elapsed)}`;
+                    }).join('  ·  ');
                     partnerEl.style.display = 'flex';
                 } else {
                     partnerEl.style.display = 'none';
