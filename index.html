@@ -41,6 +41,11 @@
                 <button class="color-dot-btn" data-color="#2563EB" style="background:#2563EB" title="Blue"></button>
                 <button class="color-dot-btn" data-color="#E11D48" style="background:#E11D48" title="Rose"></button>
             </div>
+            <select id="projectOwnerSelect" class="select-input">
+                <option value="Mohammed">Mohammed</option>
+                <option value="Eyad">Eyad</option>
+                <option value="Yusuf">Yusuf</option>
+            </select>
             <div class="modal-actions">
                 <button id="cancelAddProjectBtn" class="text-btn">Cancel</button>
                 <button id="saveAddProjectBtn" class="primary-btn">Create</button>
@@ -73,8 +78,6 @@
             </select>
             <select id="taskProjectSelect" class="select-input">
                 <option value="none">No project</option>
-                <option value="mobile">Mobile App Alpha</option>
-                <option value="marketing">Marketing Site</option>
             </select>
             <input type="hidden" id="taskEditId" value="">
             <div class="modal-actions">
@@ -198,6 +201,20 @@
 
             <!-- Right Column: Projects & Tasks -->
             <div class="right-col">
+                <!-- Your Week Panel -->
+                <section class="your-week-section">
+                    <div class="section-header">
+                        <h2>Your Week</h2>
+                        <div class="yw-avatar-tabs" id="ywAvatarTabs">
+                            <button class="yw-tab" data-user="MOHAMMED" title="Mohammed">M</button>
+                            <button class="yw-tab" data-user="EYAD" title="Eyad">E</button>
+                            <button class="yw-tab" data-user="YUSUF" title="Yusuf">Y</button>
+                        </div>
+                    </div>
+                    <div id="ywStats" class="yw-stats"></div>
+                    <div id="teamStrip" class="team-strip"></div>
+                </section>
+
                 <section class="projects-section">
                     <div class="section-header">
                         <h2>Active Projects</h2>

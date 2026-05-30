@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Constants & element refs ──────────────────────────────────────────────
     const users = { 'MOHAMMED': '2003', 'EYAD': '2001', 'YUSUF': '2004' };
+    const NAME  = { MOHAMMED: 'Mohammed', EYAD: 'Eyad', YUSUF: 'Yusuf' };
+    const esc   = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const uid   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
     const loginOverlay  = document.getElementById('loginOverlay');
     const mainApp       = document.getElementById('mainApp');
 
@@ -27,6 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let tasks    = JSON.parse(localStorage.getItem('tasks'))    || [];
     let dayTodos = JSON.parse(localStorage.getItem('dayTodos')) || {};
     let projects = JSON.parse(localStorage.getItem('savedProjects')) || [];
+    let projectTasksByProject = {};
+    let projectTimeByProject  = {};
+    let viewUser = null;
 
     let _fbSync = false;
 
@@ -58,6 +64,16 @@ document.addEventListener('DOMContentLoaded', () => {
             watch('tasks',         'tasks',         v => { tasks = v; },    () => { renderAll(); renderTasks(); });
             watch('dayTodos',      'dayTodos',      v => { dayTodos = v; }, renderAll);
             watch('savedProjects', 'savedProjects', v => { projects = v; }, renderProjects);
+            // Read-only listeners: written by project page, consumed here for cards + personal dashboard
+            db.ref('data/projectTasksByProject').on('value', snap => {
+                projectTasksByProject = snap.val() || {};
+                renderProjects();
+                renderYourWeek();
+            });
+            db.ref('data/projectTimeByProject').on('value', snap => {
+                projectTimeByProject = snap.val() || {};
+                renderYourWeek();
+            });
         }
     })();
 
@@ -90,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (weekLabel) {
             weekLabel.textContent = s.getMonth() === e.getMonth()
                 ? `${months[s.getMonth()]} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`
-                : `${months[s.getMonth()]} ${s.getDate()} – ${months[e.getMonth()]} ${e.getDate()}`;
+                : `${months[s.getMonth()]} ${s.getDate()} – ${months[e.getMonth()]} ${e.getDate()}, ${s.getFullYear()}`;
         }
 
         const dayNames = ['Sat','Sun','Mon','Tue','Wed','Thu','Fri'];
@@ -111,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
             card.className = 'week-day-card' + (isToday ? ' today' : '') + (isFri ? ' friday' : '');
 
             let itemsHtml = allItems.slice(0, 8).map(item =>
-                `<div class="week-mini-item ${item.type}">${item.text}</div>`
+                `<div class="week-mini-item ${item.type}">${esc(item.text)}</div>`
             ).join('');
             if (allItems.length > 8) itemsHtml += `<div class="week-more">+${allItems.length - 8} more</div>`;
 
@@ -203,9 +219,10 @@ document.addEventListener('DOMContentLoaded', () => {
             item.className = 'event-item';
             item.innerHTML = `
                 <div class="event-date">${mon} ${d}</div>
-                <div class="event-item-info"><h4>${evt.title}</h4></div>
+                <div class="event-item-info"><h4>${esc(evt.title)}</h4></div>
                 <button class="delete-event-btn" data-id="${evt.id}">✖</button>`;
             item.querySelector('.delete-event-btn').addEventListener('click', () => {
+                if (!confirm(`Delete event "${evt.title}"?`)) return;
                 events = events.filter(e => e.id !== evt.id);
                 saveEvents(); renderAll();
                 if (dayDetailModal?.style.display === 'flex') renderDayDetail();
@@ -237,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const title = eventTitleInput.value.trim();
         const date  = eventDateInput.value;
         if (!title || !date) return;
-        events.push({ id: Date.now(), title, date });
+        events.push({ id: uid(), title, date });
         saveEvents(); renderAll();
         eventModal.style.display = 'none';
         if (dayDetailModal?.style.display === 'flex') renderDayDetail();
@@ -252,16 +269,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const openSubtasks = new Set();
         todoList.querySelectorAll('[data-id]').forEach(li => {
             const c = li.querySelector('.subtasks-container');
-            if (c && c.style.display !== 'none') openSubtasks.add(parseInt(li.dataset.id));
+            if (c && c.style.display !== 'none') openSubtasks.add(String(li.dataset.id));
         });
         todoList.innerHTML = '';
         tasks.forEach(task => {
             const completedSubs = (task.subtasks || []).filter(s => s.completed).length;
             const totalSubs     = (task.subtasks || []).length;
             const assigneeClass = task.assignee === 'Mohammed' ? 'tag-mohammed' : task.assignee === 'Yusuf' ? 'tag-yusuf' : 'tag-eyad';
-            const proj = PROJECTS.find(p => p.id === (task.projectId || 'none'));
-            const tagHtml = proj && proj.id !== 'none'
-                ? `<span class="project-tag" style="background:${proj.color}1A;color:${proj.color};border:1px solid ${proj.color}33">${proj.name}</span>`
+            const proj = (task.projectId && task.projectId !== 'none')
+                ? projects.find(p => String(p.id) === String(task.projectId))
+                : null;
+            const tagHtml = proj
+                ? `<span class="project-tag" style="background:${proj.color}1A;color:${proj.color};border:1px solid ${proj.color}33">${esc(proj.name)}</span>`
                 : '';
 
             const li = document.createElement('li');
@@ -274,13 +293,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         <label class="todo-label">
                             <input type="checkbox" class="todo-checkbox" ${task.completed ? 'checked' : ''}>
                             <span class="custom-checkbox"></span>
-                            <span class="todo-text">${task.text}</span>
+                            <span class="todo-text">${esc(task.text)}</span>
                         </label>
                         ${totalSubs > 0 ? `<span class="subtask-count">${completedSubs}/${totalSubs}</span>` : ''}
                     </div>
                     <div class="todo-right">
                         ${tagHtml}
-                        <span class="assignee ${assigneeClass}">${task.assignee}</span>
+                        <span class="assignee ${assigneeClass}">${esc(task.assignee)}</span>
                         <button class="task-action-btn task-edit-btn" title="Edit">✎</button>
                         <button class="task-action-btn task-delete-btn" title="Delete">✖</button>
                     </div>
@@ -292,7 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             todoList.appendChild(li);
             renderSubtasks(task, li);
-            if (openSubtasks.has(task.id)) {
+            if (openSubtasks.has(String(task.id))) {
                 li.querySelector('.subtasks-container').style.display = 'block';
                 li.querySelector('.subtask-toggle').classList.add('open');
             }
@@ -311,6 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             li.querySelector('.task-edit-btn').addEventListener('click',   () => openTaskModal(task));
             li.querySelector('.task-delete-btn').addEventListener('click', () => {
+                if (!confirm(`Delete task "${task.text}"?`)) return;
                 tasks = tasks.filter(t => t.id !== task.id);
                 saveTasks(); renderTasks();
             });
@@ -336,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <label class="todo-label">
                     <input type="checkbox" class="todo-checkbox" ${sub.completed ? 'checked' : ''}>
                     <span class="custom-checkbox"></span>
-                    <span class="todo-text">${sub.text}</span>
+                    <span class="todo-text">${esc(sub.text)}</span>
                 </label>
                 <button class="task-action-btn" title="Delete">✖</button>`;
             sli.querySelector('.todo-checkbox').addEventListener('change', function () {
@@ -345,6 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 saveTasks(); renderTasks();
             });
             sli.querySelector('.task-action-btn').addEventListener('click', () => {
+                if (!confirm(`Delete subtask "${sub.text}"?`)) return;
                 task.subtasks = task.subtasks.filter(s => s.id !== sub.id);
                 saveTasks(); renderTasks();
             });
@@ -379,10 +400,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const editId    = taskEditIdInput.value;
         if (!text) return;
         if (editId) {
-            const t = tasks.find(t => t.id === parseInt(editId));
+            const t = tasks.find(t => t.id == editId);
             if (t) { t.text = text; t.assignee = assignee; t.projectId = projectId; }
         } else {
-            tasks.push({ id: Date.now(), text, assignee, projectId, completed: false, subtasks: [] });
+            tasks.push({ id: uid(), text, assignee, projectId, completed: false, subtasks: [] });
         }
         saveTasks(); renderTasks();
         taskModal.style.display = 'none';
@@ -404,14 +425,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('cancelSubtaskBtn')?.addEventListener('click', () => { subtaskModal.style.display = 'none'; });
     document.getElementById('saveSubtaskBtn')?.addEventListener('click', () => {
-        const text   = subtaskTextInput.value.trim();
-        const taskId = parseInt(subtaskParentId.value);
+        const text  = subtaskTextInput.value.trim();
+        const rawId = subtaskParentId.value;
         if (!text) return;
-        const task = tasks.find(t => t.id === taskId);
+        const task = tasks.find(t => t.id == rawId);
         if (task) {
-            task.subtasks.push({ id: Date.now(), text, completed: false });
+            task.subtasks.push({ id: uid(), text, completed: false });
             saveTasks(); renderTasks();
-            const li = todoList?.querySelector(`[data-id="${taskId}"]`);
+            const li = todoList?.querySelector(`[data-id="${rawId}"]`);
             if (li) {
                 li.querySelector('.subtasks-container').style.display = 'block';
                 li.querySelector('.subtask-toggle').classList.add('open');
@@ -445,6 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderDayDetail() {
+        if (!currentDay) return;
         const ds = currentDay;
         const todayEvents = events.filter(e => e.date === ds);
         dayEventsList.innerHTML = '';
@@ -452,8 +474,9 @@ document.addEventListener('DOMContentLoaded', () => {
         todayEvents.forEach(evt => {
             const item = document.createElement('div');
             item.className = 'day-event-item';
-            item.innerHTML = `<span>${evt.title}</span><button class="task-action-btn" style="color:var(--color-text-muted)">✖</button>`;
+            item.innerHTML = `<span>${esc(evt.title)}</span><button class="task-action-btn" style="color:var(--color-text-muted)">✖</button>`;
             item.querySelector('button').addEventListener('click', () => {
+                if (!confirm(`Delete event "${evt.title}"?`)) return;
                 events = events.filter(e => e.id !== evt.id);
                 saveEvents(); renderAll(); renderDayDetail();
             });
@@ -471,7 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <label class="todo-label">
                     <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
                     <span class="custom-checkbox"></span>
-                    <span class="todo-text">${todo.text}</span>
+                    <span class="todo-text">${esc(todo.text)}</span>
                 </label>
                 <button class="task-action-btn" style="color:var(--color-text-muted)">✖</button>`;
             li.querySelector('.todo-checkbox').addEventListener('change', function () {
@@ -499,7 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('saveDayEventBtn')?.addEventListener('click', () => {
         const title = dayEventInput.value.trim();
         if (!title) return;
-        events.push({ id: Date.now(), title, date: currentDay });
+        events.push({ id: uid(), title, date: currentDay });
         saveEvents(); renderAll();
         dayEventInput.value = '';
         dayEventAddRow.style.display = 'none';
@@ -517,7 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = dayTodoInput.value.trim();
         if (!text) return;
         if (!dayTodos[currentDay]) dayTodos[currentDay] = [];
-        dayTodos[currentDay].push({ id: Date.now(), text, completed: false });
+        dayTodos[currentDay].push({ id: uid(), text, completed: false });
         saveDayTodos(); renderAll();
         dayTodoInput.value = '';
         dayTodoAddRow.style.display = 'none';
@@ -528,11 +551,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Projects (dashboard) ──────────────────────────────────────────────────
     const PROJECT_COLORS = ['#C2620E','#7C3AED','#059669','#2563EB','#E11D48'];
     let selectedProjectColor = PROJECT_COLORS[0];
+    let selectedProjectOwner = 'Mohammed';
+
+    function rebuildTaskProjectSelect() {
+        if (!taskProjectSelect) return;
+        const cur = taskProjectSelect.value;
+        taskProjectSelect.innerHTML = '<option value="none">No project</option>';
+        projects.forEach(proj => {
+            const opt = document.createElement('option');
+            opt.value = String(proj.id);
+            opt.textContent = proj.name;
+            taskProjectSelect.appendChild(opt);
+        });
+        const valid = [...taskProjectSelect.options].some(o => o.value === cur);
+        taskProjectSelect.value = valid ? cur : 'none';
+    }
 
     function renderProjects() {
         const list = document.getElementById('projectList');
         if (!list) return;
         list.innerHTML = '';
+        rebuildTaskProjectSelect();
         if (projects.length === 0) {
             const p = document.createElement('p');
             p.style.cssText = 'color:var(--text-faint);font-size:0.875rem;font-style:italic;padding:16px 0;';
@@ -540,21 +579,66 @@ document.addEventListener('DOMContentLoaded', () => {
             list.appendChild(p);
             return;
         }
-        projects.forEach(proj => {
+
+        const BORN_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const active  = projects.filter(p => (p.status || 'active') === 'active');
+        const passive = projects.filter(p => (p.status || 'active') === 'passive');
+
+        [...active, ...passive].forEach(proj => {
+            const isPassive = (proj.status || 'active') === 'passive';
+
+            // Compute real progress from Agent A's data
+            const rawTasks = projectTasksByProject[String(proj.id)];
+            const projTasks = Array.isArray(rawTasks) ? rawTasks
+                : (rawTasks ? Object.values(rawTasks) : []);
+            const total = projTasks.length;
+            const done  = projTasks.filter(t => t.completed).length;
+            const pct   = total ? Math.round((done / total) * 100) : 0;
+            const progressText = total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`;
+
+            // Owner badge
+            const ownerClass = proj.owner === 'Mohammed' ? 'mohammed'
+                : proj.owner === 'Yusuf' ? 'yusuf'
+                : proj.owner === 'Eyad'  ? 'eyad' : '';
+            const ownerHtml = proj.owner
+                ? `<span class="proj-owner-badge ${ownerClass}" title="${esc(proj.owner)}">${esc(proj.owner[0].toUpperCase())}</span>`
+                : '';
+
+            // Born date
+            let bornHtml = '';
+            if (proj.createdAt) {
+                const d = new Date(proj.createdAt);
+                bornHtml = `<span class="proj-born">Born ${BORN_MONTHS[d.getMonth()]} ${d.getDate()}</span>`;
+            }
+
             const card = document.createElement('div');
-            card.className = 'project-card';
+            card.className = 'project-card' + (isPassive ? ' project-passive' : '');
             card.innerHTML = `
                 <div class="project-card-top">
                     <span class="project-color-dot" style="background:${proj.color}"></span>
                     <div class="project-info">
-                        <h3>${proj.name}</h3>
-                        <p>Tap to manage tasks</p>
+                        <h3>${esc(proj.name)}</h3>
+                        <div class="proj-meta-row">
+                            ${bornHtml}
+                            <span class="proj-progress-text">${progressText}</span>
+                        </div>
                     </div>
-                    <button class="project-delete-btn" data-id="${proj.id}" title="Delete project">✕</button>
+                    <div class="proj-card-actions">
+                        ${ownerHtml}
+                        <span class="proj-status-badge ${isPassive ? 'passive' : 'active'}">${isPassive ? 'Paused' : 'Active'}</span>
+                        <button class="proj-status-toggle" title="${isPassive ? 'Resume project' : 'Pause project'}">${isPassive ? '▶' : '⏸'}</button>
+                        <button class="project-delete-btn" title="Delete project">✕</button>
+                    </div>
                 </div>
                 <div class="progress-bar-container">
-                    <div class="progress-bar" style="width:0%;background:${proj.color}"></div>
+                    <div class="progress-bar" style="width:${pct}%;background:${proj.color}"></div>
                 </div>`;
+
+            card.querySelector('.proj-status-toggle').addEventListener('click', e => {
+                e.preventDefault(); e.stopPropagation();
+                proj.status = isPassive ? 'active' : 'passive';
+                saveProjects(); renderProjects();
+            });
             card.querySelector('.project-delete-btn').addEventListener('click', e => {
                 e.preventDefault(); e.stopPropagation();
                 if (!confirm(`Delete "${proj.name}"?`)) return;
@@ -562,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 saveProjects(); renderProjects();
             });
             card.addEventListener('click', e => {
-                if (e.target.closest('.project-delete-btn')) return;
+                if (e.target.closest('.project-delete-btn') || e.target.closest('.proj-status-toggle')) return;
                 sessionStorage.setItem('activeProject', JSON.stringify(proj));
                 window.location.href = 'project.html';
             });
@@ -576,9 +660,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('addProjectBtn')?.addEventListener('click', () => {
         projectNameInput.value = '';
         selectedProjectColor = PROJECT_COLORS[0];
+        selectedProjectOwner = 'Mohammed';
         document.querySelectorAll('.color-dot-btn').forEach((btn, i) => {
             btn.classList.toggle('active', i === 0);
         });
+        const ownerSel = document.getElementById('projectOwnerSelect');
+        if (ownerSel) ownerSel.value = 'Mohammed';
         addProjectModal.style.display = 'flex';
         setTimeout(() => projectNameInput.focus(), 50);
     });
@@ -586,7 +673,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('saveAddProjectBtn')?.addEventListener('click', () => {
         const name = projectNameInput.value.trim();
         if (!name) return;
-        projects.push({ id: Date.now(), name, color: selectedProjectColor });
+        const ts = Date.now();
+        projects.push({ id: uid(), name, color: selectedProjectColor, owner: selectedProjectOwner, status: 'active', createdAt: ts });
         saveProjects(); renderProjects();
         addProjectModal.style.display = 'none';
     });
@@ -599,6 +687,116 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedProjectColor = btn.dataset.color;
         document.querySelectorAll('.color-dot-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+    });
+
+    document.getElementById('projectOwnerSelect')?.addEventListener('change', e => {
+        selectedProjectOwner = e.target.value;
+    });
+
+    // ── Personal & Team Dashboard ─────────────────────────────────────────────
+    function getWeekStart() {
+        const t = new Date(); t.setHours(0,0,0,0);
+        t.setDate(t.getDate() - (t.getDay() + 1) % 7);
+        return t;
+    }
+
+    function renderYourWeek() {
+        const ywStats   = document.getElementById('ywStats');
+        const teamStrip = document.getElementById('teamStrip');
+        if (!ywStats) return;
+        const user = viewUser || localStorage.getItem('currentUser') || 'MOHAMMED';
+        const ALL_USERS  = ['MOHAMMED','EYAD','YUSUF'];
+        const weekStart  = getWeekStart();
+        const now        = new Date();
+        const todayStr   = dateStr(now.getFullYear(), now.getMonth(), now.getDate());
+        const weekEnd    = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+        function getStatsFor(u) {
+            const assigneeName = NAME[u];
+            let assigned = 0, completed = 0, overdue = 0;
+            Object.values(projectTasksByProject).forEach(rawTasks => {
+                const ptasks = Array.isArray(rawTasks) ? rawTasks : Object.values(rawTasks || {});
+                ptasks.forEach(t => {
+                    if ((t.assignee || '') !== assigneeName) return;
+                    assigned++;
+                    if (t.completed) completed++;
+                    if (!t.completed && t.dueType === 'hard' && t.dueDate && t.dueDate < todayStr) overdue++;
+                });
+            });
+            let weekSecs = 0;
+            const activeDays = new Set();
+            Object.values(projectTimeByProject).forEach(timeData => {
+                if (!timeData || !Array.isArray(timeData.sessions)) return;
+                timeData.sessions.forEach(s => {
+                    if (s.user !== u || !s.endedAt) return;
+                    const endDate = new Date(s.endedAt);
+                    if (endDate >= weekStart && endDate <= weekEnd) weekSecs += (s.duration || 0);
+                    activeDays.add(dateStr(endDate.getFullYear(), endDate.getMonth(), endDate.getDate()));
+                });
+            });
+            let streak = 0;
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(now); d.setHours(0,0,0,0); d.setDate(d.getDate() - i);
+                if (activeDays.has(dateStr(d.getFullYear(), d.getMonth(), d.getDate()))) streak++;
+            }
+            return { assigned, completed, overdue, weekSecs, streak };
+        }
+
+        function fmtTime(sec) {
+            if (sec < 60) return sec > 0 ? sec + 's' : '—';
+            const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+            return h ? h + 'h ' + m + 'm' : m + 'm';
+        }
+
+        const s = getStatsFor(user);
+        const cr = s.assigned > 0 ? Math.round((s.completed / s.assigned) * 100) : null;
+        const overdueLabel = s.overdue === 0 ? 'nothing overdue ✓'
+            : s.overdue === 1 ? '1 thing waiting on you'
+            : s.overdue + ' things waiting on you';
+
+        ywStats.innerHTML = `
+            <div class="yw-stat-row">
+                <div class="yw-stat">
+                    <div class="yw-stat-value">${cr !== null ? cr + '%' : '—'}</div>
+                    <div class="yw-stat-label">completion${s.assigned > 0 ? ' · ' + s.completed + '/' + s.assigned : ''}</div>
+                </div>
+                <div class="yw-stat">
+                    <div class="yw-stat-value${s.overdue > 0 ? ' yw-overdue' : ''}">${s.overdue > 0 ? s.overdue : '—'}</div>
+                    <div class="yw-stat-label">${overdueLabel}</div>
+                </div>
+                <div class="yw-stat">
+                    <div class="yw-stat-value">${fmtTime(s.weekSecs)}</div>
+                    <div class="yw-stat-label">logged this week</div>
+                </div>
+                <div class="yw-stat">
+                    <div class="yw-stat-value">${s.streak}</div>
+                    <div class="yw-stat-label">active of last 7 days</div>
+                </div>
+            </div>`;
+
+        if (teamStrip) {
+            teamStrip.innerHTML = ALL_USERS.map(u => {
+                const ts = getStatsFor(u);
+                const tcr = ts.assigned > 0 ? Math.round((ts.completed / ts.assigned) * 100) : null;
+                const cls = u === 'MOHAMMED' ? 'mohammed' : u === 'EYAD' ? 'eyad' : 'yusuf';
+                return `<div class="team-row">
+                    <span class="team-av ${cls}">${esc(NAME[u][0])}</span>
+                    <span class="team-name">${esc(NAME[u])}</span>
+                    <span class="team-cr">${tcr !== null ? tcr + '%' : '—'}</span>
+                    <span class="team-lbl">done</span>
+                    <span class="team-cr">${fmtTime(ts.weekSecs)}</span>
+                    <span class="team-lbl">this week</span>
+                </div>`;
+            }).join('');
+        }
+    }
+
+    document.getElementById('ywAvatarTabs')?.addEventListener('click', e => {
+        const btn = e.target.closest('.yw-tab');
+        if (!btn) return;
+        viewUser = btn.dataset.user;
+        document.querySelectorAll('.yw-tab').forEach(b => b.classList.toggle('active', b === btn));
+        renderYourWeek();
     });
 
     // ── Calendar Widget (collapse/expand) ─────────────────────────────────────
@@ -1106,6 +1304,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderAll();
             renderTasks();
             renderProjects();
+            renderYourWeek();
         }
     }
 
@@ -1113,12 +1312,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkAuth() {
         const user = localStorage.getItem('currentUser');
         if (user && users[user]) {
+            viewUser = user;
             loginOverlay.style.display = 'none';
             mainApp.style.display = 'block';
             document.querySelectorAll('.avatar').forEach(av => av.classList.remove('active-user'));
             if (user === 'MOHAMMED') document.querySelector('.avatar.mohammed')?.classList.add('active-user');
             if (user === 'EYAD')     document.querySelector('.avatar.eyad')?.classList.add('active-user');
             if (user === 'YUSUF')    document.querySelector('.avatar.yusuf')?.classList.add('active-user');
+            document.querySelectorAll('.yw-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.user === user);
+            });
             init();
         } else {
             loginOverlay.style.display = 'flex';
