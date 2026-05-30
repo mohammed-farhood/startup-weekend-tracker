@@ -626,35 +626,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Project Page ──────────────────────────────────────────────────────────
     let _renderProjectTasks = null; // hoisted reference so init() can call it
+    let _projectStopTimer    = null; // set by project page; lets logout call stopTimer before clearing currentUser
     const projectTodoList = document.getElementById('projectTodoList');
     if (projectTodoList) {
         // Load active project info and set page title
         const activeProj = JSON.parse(sessionStorage.getItem('activeProject'));
+        const projectId  = activeProj ? String(activeProj.id) : 'unknown';
         if (activeProj) {
             const h1 = document.querySelector('.project-header h1');
             if (h1) h1.textContent = activeProj.name;
             const bar = document.querySelector('.project-header .progress-bar');
             if (bar) bar.style.background = activeProj.color;
+            document.title = activeProj.name + ' — Startup Weekend';
         }
 
-        // Delete whole project button
+        let projectTasks = JSON.parse(localStorage.getItem('projectTasks_' + projectId)) || [];
+        const saveProjectTasks = () => {
+            localStorage.setItem('projectTasks_' + projectId, JSON.stringify(projectTasks));
+            if (!_fbSync) db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
+        };
+
+        // Delete whole project button — placed after projectTasks/saveProjectTasks to avoid temporal dead zone
         document.getElementById('deleteProjectBtn')?.addEventListener('click', () => {
             const proj = JSON.parse(sessionStorage.getItem('activeProject'));
             if (!proj) return;
             if (!confirm(`Delete "${proj.name}" and all its tasks?`)) return;
             projects = projects.filter(p => p.id !== proj.id);
             saveProjects();
-            projectTasks = [];
-            saveProjectTasks();
+            db.ref('data/projectTasksByProject/' + proj.id).remove();
+            db.ref('data/projectTimeByProject/' + proj.id).remove();
             sessionStorage.removeItem('activeProject');
             window.location.href = 'index.html';
         });
-
-        let projectTasks = JSON.parse(localStorage.getItem('projectTasks')) || [];
-        const saveProjectTasks = () => {
-            localStorage.setItem('projectTasks', JSON.stringify(projectTasks));
-            if (!_fbSync) db.ref('data/projectTasks').set(projectTasks);
-        };
 
         function updateProjectProgress() {
             const total = projectTasks.length;
@@ -770,7 +773,7 @@ document.addEventListener('DOMContentLoaded', () => {
         _renderProjectTasks = renderProjectTasks; // expose to init()
 
         // ── Time Tracker ─────────────────────────────────────────────────────────
-        const TIME_KEY = 'projectTimeData';
+        const TIME_KEY = 'projectTime_' + projectId;
 
         function getCurrentUser() { return localStorage.getItem('currentUser'); }
         const ALL_USERS = ['MOHAMMED', 'EYAD', 'YUSUF'];
@@ -790,7 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         function saveTimeData(d) {
             localStorage.setItem(TIME_KEY, JSON.stringify(d));
-            if (!_fbSync) db.ref('data/projectTimeData').set(d);
+            if (!_fbSync) db.ref('data/projectTimeByProject/' + projectId).set(d);
         }
 
         function fmtDuration(sec) {
@@ -938,6 +941,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const taskId = sel && sel.value ? parseInt(sel.value) : null;
             const task   = taskId ? projectTasks.find(t => t.id === taskId) : null;
             const d      = loadTimeData();
+            const existing = d.activeSessions[user];
+            if (existing) {
+                const dur = Math.floor((Date.now() - existing.startTime) / 1000);
+                if (dur > 0) d.sessions.push({ id: Date.now(), user, taskId: existing.taskId, taskName: existing.taskName, duration: dur });
+            }
             d.activeSessions[user] = { taskId, taskName: task ? task.text : null, startTime: Date.now() };
             saveTimeData(d);
             renderTimerUI();
@@ -966,22 +974,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (body) { body.style.display = 'none'; if (btn) btn.textContent = 'show'; }
         }
 
-        document.getElementById('logoutBtn')?.addEventListener('click', stopTimer, true);
+        _projectStopTimer = stopTimer;
 
         // ── Firebase real-time sync (project page) ────────────────────────────
-        db.ref('data/projectTasks').on('value', snap => {
+        db.ref('data/projectTasksByProject/' + projectId).on('value', snap => {
             const val = snap.val();
             if (val !== null) {
                 _fbSync = true;
                 projectTasks = val;
-                localStorage.setItem('projectTasks', JSON.stringify(projectTasks));
+                localStorage.setItem('projectTasks_' + projectId, JSON.stringify(projectTasks));
                 renderProjectTasks();
                 _fbSync = false;
             } else if (projectTasks.length > 0) {
-                db.ref('data/projectTasks').set(projectTasks);
+                db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
             }
         });
-        db.ref('data/projectTimeData').on('value', snap => {
+        db.ref('data/projectTimeByProject/' + projectId).on('value', snap => {
             const val = snap.val();
             if (val !== null) {
                 _fbSync = true;
@@ -989,7 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try { renderTimerUI(); } finally { _fbSync = false; }
             } else {
                 const local = JSON.parse(localStorage.getItem(TIME_KEY));
-                if (local) db.ref('data/projectTimeData').set(local);
+                if (local) db.ref('data/projectTimeByProject/' + projectId).set(local);
             }
         });
 
@@ -1048,6 +1056,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        if (_projectStopTimer) _projectStopTimer();
         localStorage.removeItem('currentUser');
         loginOverlay.style.display = 'flex';
         mainApp.style.display = 'none';
