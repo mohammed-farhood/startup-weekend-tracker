@@ -1476,7 +1476,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (dur > 0) d.sessions.push({ id: uid(), user, taskId: active.taskId, taskName: active.taskName, duration: dur, endedAt: Date.now() });
             }
             const task = projectTasks.find(t => t.id == taskId);
-            d.activeSessions[user] = { taskId, taskName: task ? task.text : null, startTime: Date.now() };
+            d.activeSessions[user] = { taskId, taskName: task ? task.text : null, startTime: Date.now(), lastTick: Date.now() };
             saveTimeData(d);
             renderTimerUI();
         }
@@ -1484,13 +1484,33 @@ document.addEventListener('DOMContentLoaded', () => {
         function renderTimerUI() {
             const user = getCurrentUser();
             const d    = loadTimeData();
+            const ABANDON_MS = 90 * 1000;   // no heartbeat this long ⇒ app was closed; don't count the gap
+            const FB_BEAT_MS = 30 * 1000;   // how often a live session pings Firebase so other devices see it
             if (user && d.activeSessions[user]) {
-                const stale = (Date.now() - d.activeSessions[user].startTime) / 1000;
-                if (stale > MAX_SESSION_SEC) {
-                    const act = d.activeSessions[user];
+                const act    = d.activeSessions[user];
+                const last   = act.lastTick || act.startTime;            // last moment the page was provably open
+                const openSec = Math.floor((last - act.startTime) / 1000); // time actually spent with page open
+                if (Date.now() - last > ABANDON_MS) {
+                    // Timer was left running while the app was closed / navigated away.
+                    // Commit only the time the page was actually open, then stop — never the closed gap.
+                    const dur = Math.min(Math.max(openSec, 0), MAX_SESSION_SEC);
+                    if (dur > 0) d.sessions.push({ id: uid(), user, taskId: act.taskId, taskName: act.taskName, duration: dur, endedAt: last });
+                    d.activeSessions[user] = null;
+                    saveTimeData(d);
+                } else if (openSec >= MAX_SESSION_SEC) {
+                    // Ran continuously past the 8h cap.
                     d.sessions.push({ id: uid(), user, taskId: act.taskId, taskName: act.taskName, duration: MAX_SESSION_SEC, endedAt: Date.now() });
                     d.activeSessions[user] = null;
                     saveTimeData(d);
+                } else {
+                    // Alive: heartbeat. localStorage every tick (cheap); Firebase every ~30s (liveness for peers).
+                    act.lastTick = Date.now();
+                    if (Date.now() - (act.fbBeat || 0) > FB_BEAT_MS) {
+                        act.fbBeat = Date.now();
+                        saveTimeData(d);
+                    } else {
+                        localStorage.setItem(TIME_KEY, JSON.stringify(d));
+                    }
                 }
             }
             const active = user ? d.activeSessions[user] : null;
@@ -1570,7 +1590,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dur = Math.min(Math.floor((Date.now() - existing.startTime) / 1000), MAX_SESSION_SEC);
                 if (dur > 0) d.sessions.push({ id: uid(), user, taskId: existing.taskId, taskName: existing.taskName, duration: dur, endedAt: Date.now() });
             }
-            d.activeSessions[user] = { taskId, taskName: task ? task.text : null, startTime: Date.now() };
+            d.activeSessions[user] = { taskId, taskName: task ? task.text : null, startTime: Date.now(), lastTick: Date.now() };
             saveTimeData(d);
             renderTimerUI();
         });
@@ -1599,6 +1619,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         _projectStopTimer = stopTimer;
+
+        // Leaving the project page stamps the moment we left so a forgotten timer,
+        // on reopen, stops and counts only up to here — never the time spent away/closed.
+        window.addEventListener('pagehide', () => {
+            const user = getCurrentUser(); if (!user) return;
+            const d = loadTimeData();
+            const act = d.activeSessions[user];
+            if (!act) return;
+            act.lastTick = Date.now();
+            localStorage.setItem(TIME_KEY, JSON.stringify(d));
+            try { db.ref('data/projectTimeByProject/' + projectId).set(d); } catch (e) {}
+        });
 
         // ── Firebase real-time sync (project page) — attached after auth ───────
         function attachProjectSync() {
