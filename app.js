@@ -41,8 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveProjects = () => { localStorage.setItem('savedProjects', JSON.stringify(projects)); if (!_fbSync) db.ref('data/savedProjects').set(projects); };
 
     // ── Firebase real-time sync (main page) ───────────────────────────────────
-    (function attachMainSync() {
+    function attachMainSync() {
         function watch(fbKey, lsKey, assignFn, renderFn) {
+            db.ref('data/' + fbKey).off();
             db.ref('data/' + fbKey).on('value', snap => {
                 const val = snap.val();
                 if (val !== null) {
@@ -66,18 +67,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderProjects(); renderFridayTimeline(); renderCommandCenter();
             });
             // Read-only listeners: written by project page, consumed here for cards + personal dashboard
+            db.ref('data/projectTasksByProject').off();
             db.ref('data/projectTasksByProject').on('value', snap => {
                 projectTasksByProject = snap.val() || {};
                 renderProjects();
                 renderYourWeek();
                 renderCommandCenter();
             });
+            db.ref('data/projectTimeByProject').off();
             db.ref('data/projectTimeByProject').on('value', snap => {
                 projectTimeByProject = snap.val() || {};
                 renderYourWeek();
             });
         }
-    })();
+    }
 
     function dateStr(y, m, d) {
         return `${y}-${String(m + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -1030,6 +1033,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Project Page ──────────────────────────────────────────────────────────
     let _renderProjectTasks = null; // hoisted reference so init() can call it
+    let _attachProjectSync = null;  // attaches project-page Firebase listeners after auth
     let _projectStopTimer    = null; // set by project page; lets logout call stopTimer before clearing currentUser
     const projectTodoList = document.getElementById('projectTodoList');
     if (projectTodoList) {
@@ -1467,31 +1471,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
         _projectStopTimer = stopTimer;
 
-        // ── Firebase real-time sync (project page) ────────────────────────────
-        db.ref('data/projectTasksByProject/' + projectId).on('value', snap => {
-            const val = snap.val();
-            if (val !== null) {
-                _fbSync = true;
-                projectTasks = val;
-                localStorage.setItem('projectTasks_' + projectId, JSON.stringify(projectTasks));
-                const ae = document.activeElement;
-                if (!ae || !ae.classList.contains('notes-textarea')) renderProjectTasks();
-                _fbSync = false;
-            } else if (projectTasks.length > 0) {
-                db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
-            }
-        });
-        db.ref('data/projectTimeByProject/' + projectId).on('value', snap => {
-            const val = snap.val();
-            if (val !== null) {
-                _fbSync = true;
-                localStorage.setItem(TIME_KEY, JSON.stringify(val));
-                try { renderTimerUI(); } finally { _fbSync = false; }
-            } else {
-                const local = JSON.parse(localStorage.getItem(TIME_KEY));
-                if (local) db.ref('data/projectTimeByProject/' + projectId).set(local);
-            }
-        });
+        // ── Firebase real-time sync (project page) — attached after auth ───────
+        function attachProjectSync() {
+            db.ref('data/projectTasksByProject/' + projectId).off();
+            db.ref('data/projectTasksByProject/' + projectId).on('value', snap => {
+                const val = snap.val();
+                if (val !== null) {
+                    _fbSync = true;
+                    projectTasks = val;
+                    localStorage.setItem('projectTasks_' + projectId, JSON.stringify(projectTasks));
+                    const ae = document.activeElement;
+                    if (!ae || !ae.classList.contains('notes-textarea')) renderProjectTasks();
+                    _fbSync = false;
+                } else if (projectTasks.length > 0) {
+                    db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
+                }
+            });
+            db.ref('data/projectTimeByProject/' + projectId).off();
+            db.ref('data/projectTimeByProject/' + projectId).on('value', snap => {
+                const val = snap.val();
+                if (val !== null) {
+                    _fbSync = true;
+                    localStorage.setItem(TIME_KEY, JSON.stringify(val));
+                    try { renderTimerUI(); } finally { _fbSync = false; }
+                } else {
+                    const local = JSON.parse(localStorage.getItem(TIME_KEY));
+                    if (local) db.ref('data/projectTimeByProject/' + projectId).set(local);
+                }
+            });
+            db.ref('data/projectBriefByProject/' + projectId).off();
+            db.ref('data/projectBriefByProject/' + projectId).on('value', snap => {
+                renderBrief(snap.val());
+            });
+        }
+        _attachProjectSync = attachProjectSync;
 
         // ── Project Brief ─────────────────────────────────────────────────────
         function renderBrief(data) {
@@ -1557,10 +1570,6 @@ document.addEventListener('DOMContentLoaded', () => {
             db.ref('data/projectBriefByProject/' + projectId).remove();
         });
 
-        db.ref('data/projectBriefByProject/' + projectId).on('value', snap => {
-            renderBrief(snap.val());
-        });
-
         setInterval(renderTimerUI, 1000);
         populateTimerSelect();
         renderTimerUI();
@@ -1610,6 +1619,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const upperUser = EMAIL_TO_USER[fbUser.email];
             if (upperUser) {
                 localStorage.setItem('currentUser', upperUser);
+                attachMainSync();
+                if (_attachProjectSync) _attachProjectSync();
                 showApp(upperUser);
             } else {
                 firebase.auth().signOut();
