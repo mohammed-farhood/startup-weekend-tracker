@@ -222,6 +222,43 @@
             color: var(--color-text, #1C1917);
             background: var(--color-hover, rgba(0,0,0,0.04));
         }
+
+        /* Task modal field labels + hints */
+        .field-label { display:block; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--color-text-muted,#8a8175); margin:14px 0 5px; }
+        .field-opt { text-transform:none; letter-spacing:0; font-style:italic; }
+        .field-hint { font-size:0.78rem; line-height:1.55; color:var(--color-text-muted,#8a8175); margin:9px 2px 0; }
+        .field-hint b { color:var(--color-text,#1C1917); font-weight:600; }
+        .field-hint em { font-style:italic; }
+
+        /* ── Roadmap (tiers → steps journey map) ── */
+        .roadmap-section { margin-top: 4px; }
+        .roadmap-meta { font-family:'Instrument Sans',sans-serif; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--color-text-muted,#8a8175); margin-left:8px; font-weight:500; }
+        .roadmap { display:flex; flex-direction:column; gap:7px; }
+        .rm-empty { font-size:0.85rem; line-height:1.55; color:var(--color-text-muted,#8a8175); padding:16px 18px; background:var(--surface,#F0E9DD); border:1px dashed var(--border,#e3dccf); border-radius:8px; }
+        .rm-empty b { color:var(--accent-deep,#9B4E0B); font-weight:600; }
+        .rm-tier { background:var(--surface,#F0E9DD); border:1px solid var(--border,#e3dccf); border-radius:10px; padding:12px 14px 8px; }
+        .rm-tier-done { border-color: var(--accent,#C2620E); }
+        .rm-tier-head { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+        .rm-tier-badge { flex:none; width:24px; height:24px; border-radius:50%; background:var(--accent,#C2620E); color:#fff; font-size:0.78rem; font-weight:600; display:grid; place-items:center; }
+        .rm-tier-done .rm-tier-badge { background:var(--accent-deep,#9B4E0B); }
+        .rm-tier-title { flex:1 1 auto; font-weight:600; font-size:0.95rem; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+        .rm-add-step { flex:none; background:none; border:none; color:var(--accent,#C2620E); font-size:0.76rem; cursor:pointer; padding:3px 7px; border-radius:6px; }
+        .rm-add-step:hover { background:var(--accent-glow,rgba(194,98,14,0.10)); }
+        .rm-del { flex:none; background:none; border:none; color:transparent; cursor:pointer; font-size:0.72rem; padding:3px 6px; border-radius:6px; transition:color 140ms ease; }
+        .rm-tier:hover .rm-del-tier, .rm-step:hover .rm-del-step { color:var(--color-text-muted,#8a8175); }
+        .rm-del:hover { color:#E11D48 !important; background:rgba(225,29,72,0.08); }
+        .rm-steps { position:relative; margin-left:11px; padding-left:22px; border-left:2px solid var(--border,#e3dccf); display:flex; flex-direction:column; }
+        .rm-step { position:relative; display:flex; align-items:center; gap:9px; padding:7px 0; cursor:pointer; }
+        .rm-node { position:absolute; left:-31px; width:14px; height:14px; border-radius:50%; background:var(--bg,#FAF7F2); border:2px solid var(--border,#cabfa8); box-sizing:border-box; display:grid; place-items:center; transition:all 180ms cubic-bezier(0.16,1,0.3,1); }
+        .rm-step.done .rm-node { background:var(--accent,#C2620E); border-color:var(--accent,#C2620E); }
+        .rm-step.done .rm-node::after { content:'✓'; color:#fff; font-size:8px; line-height:1; }
+        .rm-step.current .rm-node { border-color:var(--accent,#C2620E); background:var(--bg,#FAF7F2); animation:rm-pulse 2s ease-in-out infinite; }
+        @keyframes rm-pulse { 0%,100%{ box-shadow:0 0 0 3px var(--accent-glow,rgba(194,98,14,0.12)); } 50%{ box-shadow:0 0 0 6px rgba(194,98,14,0.05); } }
+        .rm-step-title { flex:1 1 auto; font-size:0.85rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .rm-step.done .rm-step-title { color:var(--color-text-muted,#8a8175); text-decoration:line-through; }
+        .rm-step.future .rm-step-title { color:var(--color-text-muted,#8a8175); }
+        .rm-here { flex:none; font-size:0.6rem; text-transform:uppercase; letter-spacing:0.07em; color:var(--accent-deep,#9B4E0B); background:var(--accent-glow,rgba(194,98,14,0.12)); padding:2px 7px; border-radius:10px; font-weight:600; white-space:nowrap; }
+        .rm-step-empty { font-size:0.78rem; font-style:italic; color:var(--color-text-muted,#8a8175); padding:5px 0; }
     </style>
 </head>
 <body>
@@ -246,26 +283,31 @@
         <div class="modal-card">
             <h3 id="projectTaskModalTitle">Add Task</h3>
             <input type="text" id="projectTaskText" placeholder="Task description">
+            <label class="field-label">Assigned to</label>
             <select id="projectTaskAssignee" class="select-input">
                 <option value="">Unassigned (floating)</option>
                 <option value="Mohammed">Mohammed</option>
                 <option value="Eyad">Eyad</option>
                 <option value="Yusuf">Yusuf</option>
             </select>
+            <label class="field-label">Due date <span class="field-opt">— optional</span></label>
             <div id="dueDateRow">
                 <input type="date" id="projectTaskDueDate" placeholder="Due date (optional)">
             </div>
             <div id="dueDateTypeRow">
+                <label class="field-label">Deadline type</label>
                 <select id="projectTaskDueType" class="select-input">
                     <option value="hard">Hard deadline</option>
                     <option value="loose">Loose / soft</option>
                 </select>
             </div>
+            <label class="field-label">Blocked by</label>
             <div style="margin-top:6px;">
                 <select id="projectTaskBlockedBy" class="select-input">
                     <option value="">Not blocked</option>
                 </select>
             </div>
+            <p class="field-hint">Is this task waiting on another one? Pick the task that has to be finished <em>first</em>. Until that task is done, this one is marked 🔒&nbsp;blocked and shows up under <b>“What Needs Me → Blocked”</b> on the dashboard — so nobody starts it too early. Leave it on <b>“Not blocked”</b> if it can be done any time.</p>
             <input type="hidden" id="projectTaskEditId" value="">
             <div class="modal-actions">
                 <button id="cancelProjectTaskBtn" class="text-btn">Cancel</button>
@@ -335,6 +377,15 @@
                 <span class="origin-value" id="originIdeaVal"></span>
             </div>
         </div>
+
+        <!-- Project Roadmap — tiers → steps journey map -->
+        <section class="roadmap-section">
+            <div class="section-header">
+                <h2>Roadmap <span id="roadmapMeta" class="roadmap-meta"></span></h2>
+                <button id="addTierBtn" class="icon-btn" title="Add a tier (milestone)">+ Tier</button>
+            </div>
+            <div id="roadmap" class="roadmap"></div>
+        </section>
 
         <section class="project-tasks">
             <div class="section-header">

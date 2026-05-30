@@ -48,10 +48,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const val = snap.val();
                 if (val !== null) {
                     _fbSync = true;
-                    assignFn(val);
-                    localStorage.setItem(lsKey, JSON.stringify(val));
-                    renderFn();
-                    _fbSync = false;
+                    try {
+                        assignFn(val);
+                        localStorage.setItem(lsKey, JSON.stringify(val));
+                        renderFn();
+                    } finally {
+                        _fbSync = false;   // never let a render exception strand the write-lock
+                    }
                 } else {
                     const local = JSON.parse(localStorage.getItem(lsKey));
                     const hasData = local && (Array.isArray(local) ? local.length > 0 : Object.keys(local).length > 0);
@@ -1584,11 +1587,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const val = snap.val();
                 if (val !== null) {
                     _fbSync = true;
-                    projectTasks = val;
-                    localStorage.setItem('projectTasks_' + projectId, JSON.stringify(projectTasks));
-                    const ae = document.activeElement;
-                    if (!ae || !ae.classList.contains('notes-textarea')) renderProjectTasks();
-                    _fbSync = false;
+                    try {
+                        projectTasks = val;
+                        localStorage.setItem('projectTasks_' + projectId, JSON.stringify(projectTasks));
+                        const ae = document.activeElement;
+                        if (!ae || !ae.classList.contains('notes-textarea')) renderProjectTasks();
+                    } finally {
+                        _fbSync = false;
+                    }
                 } else if (projectTasks.length > 0) {
                     db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
                 }
@@ -1609,8 +1615,112 @@ document.addEventListener('DOMContentLoaded', () => {
             db.ref('data/projectBriefByProject/' + projectId).on('value', snap => {
                 renderBrief(snap.val());
             });
+            db.ref('data/projectRoadmapByProject/' + projectId).off();
+            db.ref('data/projectRoadmapByProject/' + projectId).on('value', snap => {
+                const val = snap.val();
+                if (val) {
+                    _fbSync = true;
+                    try {
+                        projectRoadmap = val;
+                        if (!Array.isArray(projectRoadmap.tiers)) projectRoadmap.tiers = [];
+                        localStorage.setItem('roadmap_' + projectId, JSON.stringify(projectRoadmap));
+                        renderRoadmap();
+                    } finally { _fbSync = false; }
+                }
+            });
         }
         _attachProjectSync = attachProjectSync;
+
+        // ── Project Roadmap (tiers → steps journey map) ───────────────────────
+        let projectRoadmap = JSON.parse(localStorage.getItem('roadmap_' + projectId)) || { tiers: [] };
+        if (!Array.isArray(projectRoadmap.tiers)) projectRoadmap.tiers = [];
+        const saveRoadmap = () => {
+            localStorage.setItem('roadmap_' + projectId, JSON.stringify(projectRoadmap));
+            if (!_fbSync) db.ref('data/projectRoadmapByProject/' + projectId).set(projectRoadmap);
+        };
+
+        function roadmapStats() {
+            let total = 0, done = 0, currentId = null;
+            projectRoadmap.tiers.forEach(t => (t.steps || []).forEach(s => {
+                total++;
+                if (s.done) done++;
+                else if (!currentId) currentId = s.id;
+            }));
+            return { total, done, currentId };
+        }
+
+        function renderRoadmap() {
+            const wrap = document.getElementById('roadmap');
+            if (!wrap) return;
+            const { total, done, currentId } = roadmapStats();
+            const metaEl = document.getElementById('roadmapMeta');
+            if (metaEl) metaEl.textContent = total ? `${done} / ${total} steps` : '';
+
+            if (projectRoadmap.tiers.length === 0) {
+                wrap.innerHTML = `<div class="rm-empty">No roadmap yet. Add a <b>tier</b> — a major milestone on the way to the full vision — then break it into <b>steps</b>. You'll see exactly where you are on the path.</div>`;
+                return;
+            }
+            wrap.innerHTML = projectRoadmap.tiers.map((tier, ti) => {
+                const steps = tier.steps || [];
+                const stepsHtml = steps.length ? steps.map(s => {
+                    const state = s.done ? 'done' : (s.id === currentId ? 'current' : 'future');
+                    return `<div class="rm-step ${state}" data-tier="${tier.id}" data-step="${s.id}">
+                        <span class="rm-node"></span>
+                        <span class="rm-step-title">${escH(s.title)}</span>
+                        ${s.id === currentId ? '<span class="rm-here">you are here</span>' : ''}
+                        <button class="rm-del rm-del-step" data-tier="${tier.id}" data-step="${s.id}" title="Delete step">✕</button>
+                    </div>`;
+                }).join('') : `<div class="rm-step-empty">No steps yet — add the first one.</div>`;
+                const tierDone = steps.length && steps.every(s => s.done);
+                return `<div class="rm-tier ${tierDone ? 'rm-tier-done' : ''}">
+                    <div class="rm-tier-head">
+                        <span class="rm-tier-badge">${tierDone ? '✓' : (ti + 1)}</span>
+                        <span class="rm-tier-title">${escH(tier.title)}</span>
+                        <button class="rm-add-step" data-tier="${tier.id}" title="Add a step to this tier">+ step</button>
+                        <button class="rm-del rm-del-tier" data-tier="${tier.id}" title="Delete tier">✕</button>
+                    </div>
+                    <div class="rm-steps">${stepsHtml}</div>
+                </div>`;
+            }).join('');
+        }
+
+        document.getElementById('addTierBtn')?.addEventListener('click', () => {
+            const title = prompt('New tier — a major milestone (e.g. "MVP shipped", "First 10 users"):');
+            if (!title || !title.trim()) return;
+            projectRoadmap.tiers.push({ id: uid(), title: title.trim(), steps: [] });
+            saveRoadmap(); renderRoadmap();
+        });
+
+        document.getElementById('roadmap')?.addEventListener('click', e => {
+            const addStep = e.target.closest('.rm-add-step');
+            const delTier = e.target.closest('.rm-del-tier');
+            const delStep = e.target.closest('.rm-del-step');
+            const stepRow = e.target.closest('.rm-step');
+            if (addStep) {
+                const tier = projectRoadmap.tiers.find(t => t.id === addStep.dataset.tier);
+                if (!tier) return;
+                const title = prompt('New step in "' + tier.title + '":');
+                if (!title || !title.trim()) return;
+                (tier.steps = tier.steps || []).push({ id: uid(), title: title.trim(), done: false });
+                saveRoadmap(); renderRoadmap();
+            } else if (delTier) {
+                const tier = projectRoadmap.tiers.find(t => t.id === delTier.dataset.tier);
+                if (tier && confirm(`Delete tier "${tier.title}" and its steps?`)) {
+                    projectRoadmap.tiers = projectRoadmap.tiers.filter(t => t.id !== delTier.dataset.tier);
+                    saveRoadmap(); renderRoadmap();
+                }
+            } else if (delStep) {
+                const tier = projectRoadmap.tiers.find(t => t.id === delStep.dataset.tier);
+                if (tier) {
+                    tier.steps = (tier.steps || []).filter(s => s.id !== delStep.dataset.step);
+                    saveRoadmap(); renderRoadmap();
+                }
+            } else if (stepRow) {
+                const tier = projectRoadmap.tiers.find(t => t.id === stepRow.dataset.tier);
+                const step = tier && (tier.steps || []).find(s => s.id === stepRow.dataset.step);
+                if (step) { step.done = !step.done; saveRoadmap(); renderRoadmap(); }
+            }
+        });
 
         // ── Project Brief ─────────────────────────────────────────────────────
         function renderBrief(data) {
@@ -1679,6 +1789,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setInterval(renderTimerUI, 1000);
         populateTimerSelect();
         renderTimerUI();
+        renderRoadmap();
     }
 
     // ── Init ──────────────────────────────────────────────────────────────────
