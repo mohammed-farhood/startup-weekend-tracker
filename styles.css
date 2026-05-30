@@ -1576,3 +1576,151 @@ input::placeholder { color: var(--text-faint); }
 .project-passive:hover {
   opacity: 1;
 }
+
+/* === Personal & team dashboard (Agent B) === */
+
+.your-week-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px 16px;
+  margin-bottom: 20px;
+}
+.your-week-section .section-header {
+  margin-bottom: 16px;
+}
+
+/* Avatar tab switcher */
+.yw-avatar-tabs {
+  display: flex;
+  gap: 4px;
+}
+.yw-tab {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-faint);
+  transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out), background-color 160ms var(--ease-out);
+}
+.yw-tab:hover      { border-color: var(--accent); color: var(--accent); }
+.yw-tab.active     { border-color: var(--accent); color: #fff; background: var(--accent); }
+
+/* Stat grid */
+.yw-stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.yw-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.yw-stat-value {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1;
+}
+.yw-stat-value.yw-overdue {
+  color: var(--accent);
+}
+.yw-stat-label {
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+  line-height: 1.3;
+}
+
+/* Team strip */
+.team-strip {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.team-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+}
+.team-av {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+.team-av.mohammed { background: #C2620E; }
+.team-av.eyad     { background: #7C3AED; }
+.team-av.yusuf    { background: #059669; }
+.team-name  { color: var(--text); font-weight: 500; min-width: 60px; }
+.team-cr    { color: var(--text); font-weight: 600; min-width: 36px; }
+.team-lbl   { color: var(--text-faint); margin-right: 8px; }
+
+/* ── Mobile: project-delete always visible on touch/small screens ───────────── */
+@media (hover: none) {
+  .project-delete-btn {
+    color: var(--text-faint) !important;
+    opacity: 0.45;
+  }
+}
+
+/* ── Mobile breakpoint 767px ────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .main-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .right-col, .left-col {
+    padding: 0 16px;
+  }
+  .your-week-section {
+    margin: 12px 0 16px;
+  }
+  .yw-stat-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .project-card-top {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .proj-card-actions {
+    flex-wrap: wrap;
+  }
+  .proj-status-badge {
+    display: none; /* shown via badge on card top only on mobile — reduce clutter */
+  }
+  .week-strip {
+    gap: 4px;
+  }
+  .week-day-card {
+    min-width: 40px;
+    padding: 6px 4px;
+  }
+  .project-delete-btn {
+    color: var(--text-faint) !important;
+    opacity: 0.5;
+  }
+  .todo-item .todo-right {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
