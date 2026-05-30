@@ -42,7 +42,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Firebase real-time sync (main page) ───────────────────────────────────
     function attachMainSync() {
-        function watch(fbKey, lsKey, assignFn, renderFn) {
+        function watch(fbKey, lsKey, assignFn, renderFn, emptyVal) {
+            // `seeded` flips true once we've either received cloud data OR done the
+            // one-time legacy localStorage→cloud migration. After that, a null
+            // snapshot means "everything here was deleted" — we apply the empty
+            // state and NEVER re-push, so a stale tab/device can't resurrect it.
+            let seeded = false;
+            const applyEmpty = () => {
+                _fbSync = true;
+                try {
+                    assignFn(Array.isArray(emptyVal) ? [] : {});
+                    localStorage.setItem(lsKey, JSON.stringify(emptyVal));
+                    renderFn();
+                } finally { _fbSync = false; }
+            };
             db.ref('data/' + fbKey).off();
             db.ref('data/' + fbKey).on('value', snap => {
                 const val = snap.val();
@@ -55,20 +68,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     } finally {
                         _fbSync = false;   // never let a render exception strand the write-lock
                     }
-                } else {
-                    const local = JSON.parse(localStorage.getItem(lsKey));
+                    seeded = true;
+                } else if (!seeded) {
+                    // First-ever snapshot is empty: one-time seed of legacy local-only data.
+                    seeded = true;
+                    const local = JSON.parse(localStorage.getItem(lsKey) || 'null');
                     const hasData = local && (Array.isArray(local) ? local.length > 0 : Object.keys(local).length > 0);
-                    if (hasData) db.ref('data/' + fbKey).set(local);
+                    if (hasData) db.ref('data/' + fbKey).set(local); // echoes back as non-null
+                    else applyEmpty();
+                } else {
+                    // Cloud emptied after we had data → a real delete-all. Apply it.
+                    applyEmpty();
                 }
             });
         }
         if (!document.getElementById('projectTodoList')) {
-            watch('events',        'events',        v => { events = v; },   renderAll);
-            watch('tasks',         'tasks',         v => { tasks = v; },    () => { renderAll(); renderTasks(); });
-            watch('dayTodos',      'dayTodos',      v => { dayTodos = v; }, renderAll);
+            watch('events',        'events',        v => { events = v; },   renderAll, []);
+            watch('tasks',         'tasks',         v => { tasks = v; },    () => { renderAll(); renderTasks(); }, []);
+            watch('dayTodos',      'dayTodos',      v => { dayTodos = v; }, renderAll, {});
             watch('savedProjects', 'savedProjects', v => { projects = v; }, () => {
                 renderProjects(); renderFridayTimeline(); renderCommandCenter(); renderPulse();
-            });
+            }, []);
             // Read-only listeners: written by project page, consumed here for cards + personal dashboard
             db.ref('data/projectTasksByProject').off();
             db.ref('data/projectTasksByProject').on('value', snap => {
@@ -1582,6 +1602,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // ── Firebase real-time sync (project page) — attached after auth ───────
         function attachProjectSync() {
+            let ptSeeded = false;
             db.ref('data/projectTasksByProject/' + projectId).off();
             db.ref('data/projectTasksByProject/' + projectId).on('value', snap => {
                 const val = snap.val();
@@ -1595,8 +1616,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     } finally {
                         _fbSync = false;
                     }
-                } else if (projectTasks.length > 0) {
-                    db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
+                    ptSeeded = true;
+                } else if (!ptSeeded) {
+                    // First-ever snapshot is empty: one-time seed of legacy local-only tasks.
+                    ptSeeded = true;
+                    if (projectTasks.length > 0) db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
+                } else {
+                    // Cloud emptied after we had data → a real delete-all. Apply it, never resurrect.
+                    _fbSync = true;
+                    try {
+                        projectTasks = [];
+                        localStorage.setItem('projectTasks_' + projectId, JSON.stringify(projectTasks));
+                        const ae = document.activeElement;
+                        if (!ae || !ae.classList.contains('notes-textarea')) renderProjectTasks();
+                    } finally {
+                        _fbSync = false;
+                    }
                 }
             });
             db.ref('data/projectTimeByProject/' + projectId).off();
