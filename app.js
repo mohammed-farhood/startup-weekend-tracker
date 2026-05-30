@@ -63,12 +63,15 @@ document.addEventListener('DOMContentLoaded', () => {
             watch('events',        'events',        v => { events = v; },   renderAll);
             watch('tasks',         'tasks',         v => { tasks = v; },    () => { renderAll(); renderTasks(); });
             watch('dayTodos',      'dayTodos',      v => { dayTodos = v; }, renderAll);
-            watch('savedProjects', 'savedProjects', v => { projects = v; }, renderProjects);
+            watch('savedProjects', 'savedProjects', v => { projects = v; }, () => {
+                renderProjects(); renderFridayTimeline(); renderCommandCenter();
+            });
             // Read-only listeners: written by project page, consumed here for cards + personal dashboard
             db.ref('data/projectTasksByProject').on('value', snap => {
                 projectTasksByProject = snap.val() || {};
                 renderProjects();
                 renderYourWeek();
+                renderCommandCenter();
             });
             db.ref('data/projectTimeByProject').on('value', snap => {
                 projectTimeByProject = snap.val() || {};
@@ -552,6 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const PROJECT_COLORS = ['#C2620E','#7C3AED','#059669','#2563EB','#E11D48'];
     let selectedProjectColor = PROJECT_COLORS[0];
     let selectedProjectOwner = 'Mohammed';
+    let fridayColor = PROJECT_COLORS[0];
 
     function rebuildTaskProjectSelect() {
         if (!taskProjectSelect) return;
@@ -661,7 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
         projectNameInput.value = '';
         selectedProjectColor = PROJECT_COLORS[0];
         selectedProjectOwner = 'Mohammed';
-        document.querySelectorAll('.color-dot-btn').forEach((btn, i) => {
+        document.querySelectorAll('#projectColorPicker .color-dot-btn').forEach((btn, i) => {
             btn.classList.toggle('active', i === 0);
         });
         const ownerSel = document.getElementById('projectOwnerSelect');
@@ -685,12 +689,65 @@ document.addEventListener('DOMContentLoaded', () => {
         const btn = e.target.closest('.color-dot-btn');
         if (!btn) return;
         selectedProjectColor = btn.dataset.color;
-        document.querySelectorAll('.color-dot-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#projectColorPicker .color-dot-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
     });
 
     document.getElementById('projectOwnerSelect')?.addEventListener('change', e => {
         selectedProjectOwner = e.target.value;
+    });
+
+    // ── Friday Session Modal ──────────────────────────────────────────────────
+    document.getElementById('fridaySessionBtn')?.addEventListener('click', () => {
+        const ideaInput  = document.getElementById('fridayIdeaInput');
+        const pitcherSel = document.getElementById('fridayPitcherSelect');
+        if (ideaInput)  ideaInput.value = '';
+        if (pitcherSel) pitcherSel.value = 'Mohammed';
+        fridayColor = PROJECT_COLORS[0];
+        document.querySelectorAll('#fridayColorPicker .color-dot-btn').forEach((btn, i) => btn.classList.toggle('active', i === 0));
+        document.getElementById('fridayModal').style.display = 'flex';
+        setTimeout(() => ideaInput?.focus(), 50);
+    });
+    document.getElementById('cancelFridayBtn')?.addEventListener('click', () => {
+        document.getElementById('fridayModal').style.display = 'none';
+    });
+    document.getElementById('fridayModal')?.addEventListener('click', e => {
+        if (e.target === document.getElementById('fridayModal')) document.getElementById('fridayModal').style.display = 'none';
+    });
+    document.getElementById('fridayColorPicker')?.addEventListener('click', e => {
+        const btn = e.target.closest('.color-dot-btn');
+        if (!btn) return;
+        fridayColor = btn.dataset.color;
+        document.querySelectorAll('#fridayColorPicker .color-dot-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    });
+    document.getElementById('saveFridayBtn')?.addEventListener('click', () => {
+        const ideaInput  = document.getElementById('fridayIdeaInput');
+        const pitcherSel = document.getElementById('fridayPitcherSelect');
+        const idea = ideaInput ? ideaInput.value.trim() : '';
+        if (!idea) return;
+        const pitcher = pitcherSel ? pitcherSel.value : 'Mohammed';
+        const now = new Date();
+        const todayDateStr = dateStr(now.getFullYear(), now.getMonth(), now.getDate());
+        const projId = uid();
+        const proj = {
+            id: projId,
+            name: idea.length > 50 ? idea.slice(0, 47) + '…' : idea,
+            color: fridayColor,
+            owner: '',
+            status: 'active',
+            createdAt: Date.now(),
+            idea,
+            pitchedBy: pitcher
+        };
+        projects.push(proj);
+        saveProjects();
+        events.push({ id: uid(), title: 'Friday Session — ' + idea, date: todayDateStr, type: 'friday', projectId: projId });
+        saveEvents();
+        renderProjects();
+        renderAll();
+        renderFridayTimeline();
+        document.getElementById('fridayModal').style.display = 'none';
     });
 
     // ── Personal & Team Dashboard ─────────────────────────────────────────────
@@ -713,13 +770,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function getStatsFor(u) {
             const assigneeName = NAME[u];
-            let assigned = 0, completed = 0, overdue = 0;
+            let assigned = 0, completed = 0, overdue = 0, weeklyCompleted = 0;
             Object.values(projectTasksByProject).forEach(rawTasks => {
                 const ptasks = Array.isArray(rawTasks) ? rawTasks : Object.values(rawTasks || {});
                 ptasks.forEach(t => {
                     if ((t.assignee || '') !== assigneeName) return;
                     assigned++;
-                    if (t.completed) completed++;
+                    if (t.completed) {
+                        completed++;
+                        if (t.completedAt) {
+                            const cd = new Date(t.completedAt);
+                            if (cd >= weekStart && cd <= weekEnd) weeklyCompleted++;
+                        }
+                    }
                     if (!t.completed && t.dueType === 'hard' && t.dueDate && t.dueDate < todayStr) overdue++;
                 });
             });
@@ -739,7 +802,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const d = new Date(now); d.setHours(0,0,0,0); d.setDate(d.getDate() - i);
                 if (activeDays.has(dateStr(d.getFullYear(), d.getMonth(), d.getDate()))) streak++;
             }
-            return { assigned, completed, overdue, weekSecs, streak };
+            return { assigned, completed, overdue, weekSecs, streak, weeklyCompleted };
         }
 
         function fmtTime(sec) {
@@ -749,30 +812,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const s = getStatsFor(user);
+        const isEmpty = s.assigned === 0 && s.weekSecs === 0 && s.weeklyCompleted === 0;
         const cr = s.assigned > 0 ? Math.round((s.completed / s.assigned) * 100) : null;
         const overdueLabel = s.overdue === 0 ? 'nothing overdue ✓'
             : s.overdue === 1 ? '1 thing waiting on you'
             : s.overdue + ' things waiting on you';
 
-        ywStats.innerHTML = `
-            <div class="yw-stat-row">
-                <div class="yw-stat">
-                    <div class="yw-stat-value">${cr !== null ? cr + '%' : '—'}</div>
-                    <div class="yw-stat-label">completion${s.assigned > 0 ? ' · ' + s.completed + '/' + s.assigned : ''}</div>
-                </div>
-                <div class="yw-stat">
-                    <div class="yw-stat-value${s.overdue > 0 ? ' yw-overdue' : ''}">${s.overdue > 0 ? s.overdue : '—'}</div>
-                    <div class="yw-stat-label">${overdueLabel}</div>
-                </div>
-                <div class="yw-stat">
-                    <div class="yw-stat-value">${fmtTime(s.weekSecs)}</div>
-                    <div class="yw-stat-label">logged this week</div>
-                </div>
-                <div class="yw-stat">
-                    <div class="yw-stat-value">${s.streak}</div>
-                    <div class="yw-stat-label">active of last 7 days</div>
-                </div>
-            </div>`;
+        if (isEmpty) {
+            ywStats.innerHTML = '<p class="yw-empty">Your week fills in as you log time and complete tasks.</p>';
+        } else {
+            ywStats.innerHTML = `
+                <div class="yw-stat-row">
+                    <div class="yw-stat">
+                        <div class="yw-stat-value">${cr !== null ? cr + '%' : '—'}</div>
+                        <div class="yw-stat-label">${s.assigned > 0 ? s.completed + '/' + s.assigned + ' done overall' : 'no tasks yet'}</div>
+                    </div>
+                    <div class="yw-stat">
+                        <div class="yw-stat-value">${s.weeklyCompleted}</div>
+                        <div class="yw-stat-label">finished this week</div>
+                    </div>
+                    <div class="yw-stat">
+                        <div class="yw-stat-value${s.overdue > 0 ? ' yw-overdue' : ''}">${s.overdue > 0 ? s.overdue : '—'}</div>
+                        <div class="yw-stat-label">${overdueLabel}</div>
+                    </div>
+                    <div class="yw-stat">
+                        <div class="yw-stat-value">${fmtTime(s.weekSecs)}</div>
+                        <div class="yw-stat-label">logged this week</div>
+                    </div>
+                </div>`;
+        }
 
         if (teamStrip) {
             teamStrip.innerHTML = ALL_USERS.map(u => {
@@ -783,9 +851,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="team-av ${cls}">${esc(NAME[u][0])}</span>
                     <span class="team-name">${esc(NAME[u])}</span>
                     <span class="team-cr">${tcr !== null ? tcr + '%' : '—'}</span>
-                    <span class="team-lbl">done</span>
-                    <span class="team-cr">${fmtTime(ts.weekSecs)}</span>
-                    <span class="team-lbl">this week</span>
+                    <span class="team-lbl">overall</span>
+                    <span class="team-cr">${ts.weeklyCompleted}</span>
+                    <span class="team-lbl">done this week</span>
                 </div>`;
             }).join('');
         }
@@ -798,6 +866,145 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.yw-tab').forEach(b => b.classList.toggle('active', b === btn));
         renderYourWeek();
     });
+
+    // ── Command Center ("What Needs Me") ──────────────────────────────────────
+    function renderCommandCenter() {
+        const el = document.getElementById('commandCenter');
+        if (!el) return;
+        const user = localStorage.getItem('currentUser');
+        if (!user) return;
+        const assigneeName = NAME[user];
+        const now = new Date();
+        const todayStr = dateStr(now.getFullYear(), now.getMonth(), now.getDate());
+
+        // Index all tasks for blocker lookup
+        const allTasksById = {};
+        Object.values(projectTasksByProject).forEach(rawTasks => {
+            const ptasks = Array.isArray(rawTasks) ? rawTasks : Object.values(rawTasks || {});
+            ptasks.forEach(t => { allTasksById[String(t.id)] = t; });
+        });
+
+        const mine = [], floating = [], blocked = [];
+        Object.entries(projectTasksByProject).forEach(([projKey, rawTasks]) => {
+            const proj = projects.find(p => String(p.id) === projKey);
+            const ptasks = Array.isArray(rawTasks) ? rawTasks : Object.values(rawTasks || {});
+            ptasks.forEach(t => {
+                if (t.completed) return;
+                const entry = { ...t, proj };
+                const blocker = t.blockedBy ? allTasksById[String(t.blockedBy)] : null;
+                if (blocker && !blocker.completed) {
+                    blocked.push(entry);
+                } else if ((t.assignee || '') === assigneeName) {
+                    mine.push(entry);
+                } else if (!t.assignee || t.assignee === '') {
+                    floating.push(entry);
+                }
+            });
+        });
+
+        mine.sort((a, b) => {
+            const ao = (a.dueType === 'hard' && a.dueDate && a.dueDate < todayStr) ? 1 : 0;
+            const bo = (b.dueType === 'hard' && b.dueDate && b.dueDate < todayStr) ? 1 : 0;
+            if (ao !== bo) return bo - ao;
+            if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+            return a.dueDate ? -1 : b.dueDate ? 1 : 0;
+        });
+
+        function makeRow(t) {
+            const overdue = t.dueType === 'hard' && t.dueDate && t.dueDate < todayStr;
+            const dot  = t.proj ? `<span class="cc-dot" style="background:${t.proj.color}"></span>` : '';
+            const due  = t.dueDate ? `<span class="cc-due${overdue ? ' cc-due-hard' : ''}">${esc(t.dueDate)}</span>` : '';
+            const proj = t.proj ? `<span class="cc-proj">${esc(t.proj.name)}</span>` : '';
+            const div  = document.createElement('div');
+            div.className = 'cc-row' + (t.proj ? ' cc-clickable' : '');
+            div.innerHTML = `${dot}<span class="cc-text">${esc(t.text)}</span>${due}${proj}`;
+            if (t.proj) div.addEventListener('click', () => {
+                sessionStorage.setItem('activeProject', JSON.stringify(t.proj));
+                window.location.href = 'project.html';
+            });
+            return div;
+        }
+
+        function makeBlockedRow(t) {
+            const blocker = allTasksById[String(t.blockedBy)];
+            const label = blocker
+                ? `waiting on: ${esc(blocker.text)}${blocker.assignee ? ' · ' + esc(blocker.assignee) : ''}`
+                : 'waiting on a task';
+            const dot  = t.proj ? `<span class="cc-dot" style="background:${t.proj.color}"></span>` : '';
+            const proj = t.proj ? `<span class="cc-proj">${esc(t.proj.name)}</span>` : '';
+            const div  = document.createElement('div');
+            div.className = 'cc-row cc-row-blocked' + (t.proj ? ' cc-clickable' : '');
+            div.innerHTML = `${dot}<div class="cc-blocked-info"><span class="cc-text">${esc(t.text)}</span><span class="cc-waiting">${label}</span></div>${proj}`;
+            if (t.proj) div.addEventListener('click', () => {
+                sessionStorage.setItem('activeProject', JSON.stringify(t.proj));
+                window.location.href = 'project.html';
+            });
+            return div;
+        }
+
+        el.innerHTML = '';
+        [
+            { label: 'Mine',     tasks: mine,     empty: 'Nothing on your plate right now.' },
+            { label: 'Floating', tasks: floating,  empty: 'No unassigned tasks.' },
+            { label: 'Blocked',  tasks: blocked,   empty: 'Nothing blocked.', isBlocked: true },
+        ].forEach(lane => {
+            const sec = document.createElement('div');
+            sec.className = 'cc-lane';
+            const hdr = document.createElement('div');
+            hdr.className = 'cc-lane-hdr';
+            hdr.innerHTML = `<span class="cc-lane-title">${lane.label}</span>${lane.tasks.length ? `<span class="cc-lane-count">${lane.tasks.length}</span>` : ''}`;
+            sec.appendChild(hdr);
+            if (!lane.tasks.length) {
+                const p = document.createElement('p');
+                p.className = 'cc-empty';
+                p.textContent = lane.empty;
+                sec.appendChild(p);
+            } else {
+                lane.tasks.forEach(t => sec.appendChild(lane.isBlocked ? makeBlockedRow(t) : makeRow(t)));
+            }
+            el.appendChild(sec);
+        });
+    }
+
+    // ── Friday Session Timeline ───────────────────────────────────────────────
+    function renderFridayTimeline() {
+        const el = document.getElementById('fridayTimeline');
+        if (!el) return;
+        const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const sorted = [...projects].filter(p => p.createdAt).sort((a, b) => b.createdAt - a.createdAt);
+        el.innerHTML = '';
+        if (!sorted.length) {
+            el.innerHTML = '<p class="empty-text" style="padding:12px 0;font-style:italic;">No sessions yet. Start your first Friday session!</p>';
+            return;
+        }
+        sorted.forEach(proj => {
+            const d = new Date(proj.createdAt);
+            const dateLabel = `${DAYS[d.getDay()]} ${MONS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+            const isPassive = (proj.status || 'active') === 'passive';
+            const ownerCls  = proj.owner === 'Mohammed' ? 'mohammed' : proj.owner === 'Eyad' ? 'eyad' : 'yusuf';
+            const ownerBadge = proj.owner
+                ? `<span class="proj-owner-badge ${ownerCls}" style="width:16px;height:16px;font-size:.55rem;display:inline-flex" title="${esc(proj.owner)}">${esc(proj.owner[0].toUpperCase())}</span>`
+                : '';
+            const row = document.createElement('div');
+            row.className = 'fs-row' + (isPassive ? ' fs-passive' : '');
+            row.innerHTML = `
+                <div class="fs-date">${dateLabel}</div>
+                <div class="fs-body">
+                    <div class="fs-idea">${esc(proj.idea || proj.name)}</div>
+                    <div class="fs-meta">
+                        ${proj.pitchedBy ? `<span class="fs-pitched">Pitched by ${esc(proj.pitchedBy)}</span>` : ''}
+                        ${ownerBadge}
+                        <span class="proj-status-badge ${isPassive ? 'passive' : 'active'}">${isPassive ? 'Paused' : 'Active'}</span>
+                    </div>
+                </div>`;
+            row.addEventListener('click', () => {
+                sessionStorage.setItem('activeProject', JSON.stringify(proj));
+                window.location.href = 'project.html';
+            });
+            el.appendChild(row);
+        });
+    }
 
     // ── Calendar Widget (collapse/expand) ─────────────────────────────────────
     const calendarContainer = document.getElementById('calendarContainer');
@@ -1369,6 +1576,8 @@ document.addEventListener('DOMContentLoaded', () => {
             renderTasks();
             renderProjects();
             renderYourWeek();
+            renderCommandCenter();
+            renderFridayTimeline();
         }
     }
 
