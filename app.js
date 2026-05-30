@@ -783,6 +783,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function loadTimeData() {
             const raw = JSON.parse(localStorage.getItem(TIME_KEY));
             if (!raw) return { sessions: [], activeSessions: { MOHAMMED: null, EYAD: null, YUSUF: null } };
+            if (!Array.isArray(raw.sessions)) raw.sessions = [];
             if (!raw.activeSessions) raw.activeSessions = { MOHAMMED: null, EYAD: null, YUSUF: null };
             if (!raw.activeSessions.YUSUF) raw.activeSessions.YUSUF = null;
             return raw;
@@ -985,8 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (val !== null) {
                 _fbSync = true;
                 localStorage.setItem(TIME_KEY, JSON.stringify(val));
-                renderTimerUI();
-                _fbSync = false;
+                try { renderTimerUI(); } finally { _fbSync = false; }
             } else {
                 const local = JSON.parse(localStorage.getItem(TIME_KEY));
                 if (local) db.ref('data/projectTimeData').set(local);
