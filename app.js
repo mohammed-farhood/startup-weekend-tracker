@@ -12,7 +12,6 @@ const db = firebase.database();
 document.addEventListener('DOMContentLoaded', () => {
 
     // ── Constants & element refs ──────────────────────────────────────────────
-    const users = { 'MOHAMMED': '2003', 'EYAD': '2001', 'YUSUF': '2004' };
     const NAME  = { MOHAMMED: 'Mohammed', EYAD: 'Eyad', YUSUF: 'Yusuf' };
     const esc   = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const uid   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
@@ -1582,42 +1581,60 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── Auth ──────────────────────────────────────────────────────────────────
-    function checkAuth() {
-        const user = localStorage.getItem('currentUser');
-        if (user && users[user]) {
-            viewUser = user;
-            loginOverlay.style.display = 'none';
-            mainApp.style.display = 'block';
-            document.querySelectorAll('.avatar').forEach(av => av.classList.remove('active-user'));
-            if (user === 'MOHAMMED') document.querySelector('.avatar.mohammed')?.classList.add('active-user');
-            if (user === 'EYAD')     document.querySelector('.avatar.eyad')?.classList.add('active-user');
-            if (user === 'YUSUF')    document.querySelector('.avatar.yusuf')?.classList.add('active-user');
-            document.querySelectorAll('.yw-tab').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.user === user);
-            });
-            init();
+    const EMAIL_MAP = {
+        MOHAMMED: 'mohammed@startupweekend.app',
+        EYAD:     'eyad@startupweekend.app',
+        YUSUF:    'yusuf@startupweekend.app'
+    };
+    const EMAIL_TO_USER = Object.fromEntries(
+        Object.entries(EMAIL_MAP).map(([k, v]) => [v, k])
+    );
+
+    function showApp(upperUser) {
+        viewUser = upperUser;
+        loginOverlay.style.display = 'none';
+        mainApp.style.display = 'block';
+        document.querySelectorAll('.avatar').forEach(av => av.classList.remove('active-user'));
+        if (upperUser === 'MOHAMMED') document.querySelector('.avatar.mohammed')?.classList.add('active-user');
+        if (upperUser === 'EYAD')     document.querySelector('.avatar.eyad')?.classList.add('active-user');
+        if (upperUser === 'YUSUF')    document.querySelector('.avatar.yusuf')?.classList.add('active-user');
+        document.querySelectorAll('.yw-tab').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.user === upperUser);
+        });
+        init();
+    }
+
+    // ── Boot — driven by Firebase Auth state (fires on page load + after sign-in/out)
+    firebase.auth().onAuthStateChanged(fbUser => {
+        if (fbUser) {
+            const upperUser = EMAIL_TO_USER[fbUser.email];
+            if (upperUser) {
+                localStorage.setItem('currentUser', upperUser);
+                showApp(upperUser);
+            } else {
+                firebase.auth().signOut();
+            }
         } else {
+            localStorage.removeItem('currentUser');
             loginOverlay.style.display = 'flex';
             mainApp.style.display = 'none';
         }
-    }
+    });
 
-    const loginBtn     = document.getElementById('loginBtn');
+    const loginBtn      = document.getElementById('loginBtn');
     const usernameInput = document.getElementById('usernameInput');
     const passwordInput = document.getElementById('passwordInput');
     const loginError    = document.getElementById('loginError');
 
     if (loginBtn) {
         loginBtn.addEventListener('click', () => {
-            const user = usernameInput.value.trim().toUpperCase();
-            const pass = passwordInput.value.trim();
-            if (users[user] === pass) {
-                localStorage.setItem('currentUser', user);
-                loginError.style.display = 'none';
-                checkAuth();
-            } else {
-                loginError.style.display = 'block';
-            }
+            const user  = usernameInput.value.trim().toUpperCase();
+            const pass  = passwordInput.value.trim();
+            const email = EMAIL_MAP[user];
+            if (!email) { loginError.style.display = 'block'; return; }
+            firebase.auth().signInWithEmailAndPassword(email, pass)
+                .then(() => { loginError.style.display = 'none'; })
+                .catch(() => { loginError.style.display = 'block'; });
         });
         passwordInput.addEventListener('keydown', e => { if (e.key === 'Enter') loginBtn.click(); });
         usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') passwordInput.focus(); });
@@ -1625,11 +1642,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('logoutBtn')?.addEventListener('click', () => {
         if (_projectStopTimer) _projectStopTimer();
+        firebase.auth().signOut();
         localStorage.removeItem('currentUser');
         loginOverlay.style.display = 'flex';
         mainApp.style.display = 'none';
     });
-
-    // ── Boot — called LAST so all consts are initialized ─────────────────────
-    checkAuth();
 });
