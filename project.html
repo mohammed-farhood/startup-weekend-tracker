@@ -10,6 +10,162 @@
     <meta name="apple-mobile-web-app-title" content="SW Tracker">
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,300;1,400;1,500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        /* ── Due date chips ───────────────────────────────────────── */
+        .due-chip {
+            display: inline-flex;
+            align-items: center;
+            font-size: 11px;
+            font-family: var(--font-mono, monospace);
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-weight: 500;
+            margin-right: 4px;
+        }
+        .due-hard {
+            background: rgba(194, 98, 14, 0.12);
+            color: #C2620E;
+            border: 1px solid rgba(194, 98, 14, 0.25);
+        }
+        .due-hard.due-overdue {
+            background: rgba(220, 38, 38, 0.1);
+            color: #DC2626;
+            border: 1px solid rgba(220, 38, 38, 0.3);
+        }
+        .due-loose {
+            background: rgba(156, 163, 175, 0.12);
+            color: var(--color-text-muted, #9CA3AF);
+            border: 1px solid rgba(156, 163, 175, 0.2);
+        }
+        /* due date inputs in modal */
+        #dueDateRow {
+            margin-top: 10px;
+        }
+        #dueDateTypeRow {
+            margin-top: 6px;
+        }
+        #projectTaskDueDate {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--color-border, #E5E7EB);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+            background: var(--color-surface, #FAFAF9);
+            color: var(--color-text, #1C1917);
+            box-sizing: border-box;
+        }
+
+        /* ── Project Brief section ────────────────────────────────── */
+        .project-brief-section {
+            padding: 24px;
+            border-top: 1px solid var(--color-border, #E5E7EB);
+        }
+        .brief-empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 16px 0;
+        }
+        .brief-upload-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            background: rgba(194, 98, 14, 0.08);
+            color: #C2620E;
+            border: 1px solid rgba(194, 98, 14, 0.2);
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .brief-upload-label:hover {
+            background: rgba(194, 98, 14, 0.14);
+        }
+        .brief-exists-state {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 12px 0;
+        }
+        .brief-meta-info {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .brief-filename {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--color-text, #1C1917);
+        }
+        .brief-updated-by {
+            font-size: 12px;
+            color: var(--color-text-muted, #9CA3AF);
+        }
+        .brief-actions-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .brief-replace-label {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 14px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--color-text-muted, #9CA3AF);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background 0.15s;
+        }
+        .brief-replace-label:hover {
+            background: var(--color-hover, rgba(0,0,0,0.04));
+        }
+
+        /* ── Brief full-screen overlay ────────────────────────────── */
+        #briefOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: var(--color-bg, #FAFAF9);
+            flex-direction: column;
+        }
+        .brief-overlay-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--color-border, #E5E7EB);
+            background: var(--color-surface, #FAFAF9);
+            min-height: 48px;
+            box-sizing: border-box;
+        }
+        .brief-overlay-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--color-text, #1C1917);
+        }
+        .brief-close-btn {
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--color-text-muted, #9CA3AF);
+            background: transparent;
+            border: 1px solid var(--color-border, #E5E7EB);
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .brief-close-btn:hover {
+            color: var(--color-text, #1C1917);
+            background: var(--color-hover, rgba(0,0,0,0.04));
+        }
+    </style>
 </head>
 <body>
     <!-- Login Modal -->
@@ -38,12 +194,30 @@
                 <option value="Eyad">Eyad</option>
                 <option value="Yusuf">Yusuf</option>
             </select>
+            <div id="dueDateRow">
+                <input type="date" id="projectTaskDueDate" placeholder="Due date (optional)">
+            </div>
+            <div id="dueDateTypeRow">
+                <select id="projectTaskDueType" class="select-input">
+                    <option value="hard">Hard deadline</option>
+                    <option value="loose">Loose / soft</option>
+                </select>
+            </div>
             <input type="hidden" id="projectTaskEditId" value="">
             <div class="modal-actions">
                 <button id="cancelProjectTaskBtn" class="text-btn">Cancel</button>
                 <button id="saveProjectTaskBtn" class="primary-btn">Save</button>
             </div>
         </div>
+    </div>
+
+    <!-- Brief full-screen overlay -->
+    <div id="briefOverlay" style="display:none;">
+        <div class="brief-overlay-header">
+            <span class="brief-overlay-title" id="briefOverlayTitle"></span>
+            <button class="brief-close-btn" id="briefCloseBtn">✕ Close</button>
+        </div>
+        <iframe id="briefIframe" sandbox="allow-same-origin" style="width:100%;height:calc(100% - 48px);border:none;background:#fff;"></iframe>
     </div>
 
     <div class="app-container" style="display: none;" id="mainApp">
@@ -130,6 +304,29 @@
                         <div class="timer-current-task" id="timerRunningTask"></div>
                         <button id="stopTimerBtn" class="stop-timer-btn">■ Stop</button>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Project Brief -->
+        <section class="project-brief-section">
+            <div class="section-header">
+                <h2>Brief</h2>
+            </div>
+            <div id="briefEmpty" class="brief-empty-state" style="display:none;">
+                <label for="briefUploadInput" class="brief-upload-label">+ Upload brief (.html)</label>
+                <input type="file" id="briefUploadInput" accept=".html" style="display:none;">
+            </div>
+            <div id="briefExists" class="brief-exists-state" style="display:none;">
+                <div class="brief-meta-info">
+                    <span class="brief-filename" id="briefFilename"></span>
+                    <span class="brief-updated-by" id="briefUpdatedBy"></span>
+                </div>
+                <div class="brief-actions-row">
+                    <button id="briefViewBtn" class="primary-btn" style="padding:8px 16px;font-size:14px;">View</button>
+                    <label for="briefReplaceInput" class="brief-replace-label">Replace</label>
+                    <input type="file" id="briefReplaceInput" accept=".html" style="display:none;">
+                    <button id="briefRemoveBtn" class="text-btn" style="color:var(--color-text-muted);">Remove</button>
                 </div>
             </div>
         </section>

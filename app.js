@@ -646,6 +646,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!_fbSync) db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
         };
 
+        const escH = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+        const MAX_SESSION_SEC = 8 * 3600;
+
         // Delete whole project button — placed after projectTasks/saveProjectTasks to avoid temporal dead zone
         document.getElementById('deleteProjectBtn')?.addEventListener('click', () => {
             const proj = JSON.parse(sessionStorage.getItem('activeProject'));
@@ -682,8 +686,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateProjectProgress();
                 return;
             }
+            const todayStr = new Date().toISOString().slice(0, 10);
             projectTasks.forEach(task => {
                 const assigneeClass = task.assignee === 'Mohammed' ? 'tag-mohammed' : task.assignee === 'Yusuf' ? 'tag-yusuf' : 'tag-eyad';
+                let dueDateChip = '';
+                if (task.dueDate) {
+                    const overdue = task.dueDate < todayStr && !task.completed;
+                    if (task.dueType === 'loose') {
+                        dueDateChip = `<span class="due-chip due-loose">${escH(task.dueDate)}</span>`;
+                    } else {
+                        dueDateChip = `<span class="due-chip due-hard${overdue ? ' due-overdue' : ''}">${escH(task.dueDate)}</span>`;
+                    }
+                }
                 const li = document.createElement('li');
                 li.className = 'todo-item managed' + (task.completed ? ' completed' : '');
                 li.dataset.id = task.id;
@@ -693,11 +707,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <label class="todo-label">
                                 <input type="checkbox" class="todo-checkbox" ${task.completed ? 'checked' : ''}>
                                 <span class="custom-checkbox"></span>
-                                <span class="todo-text">${task.text}</span>
+                                <span class="todo-text">${escH(task.text)}</span>
                             </label>
                         </div>
                         <div class="todo-right">
-                            <span class="assignee ${assigneeClass}">${task.assignee}</span>
+                            ${dueDateChip}
+                            <span class="assignee ${assigneeClass}">${escH(task.assignee)}</span>
                             <span class="task-time-chip" id="task-time-${task.id}" style="display:none;"></span>
                             <button class="task-action-btn task-timer-btn" data-task-timer="${task.id}" title="Track time on this task">⏱</button>
                             <button class="notes-toggle-btn task-action-btn" title="Notes">${task.notes ? '📝' : '✎'} Notes</button>
@@ -706,7 +721,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                     <div class="notes-container" style="display:none;">
-                        <textarea class="notes-textarea" placeholder="Write notes for your team…">${task.notes || ''}</textarea>
+                        <textarea class="notes-textarea" placeholder="Write notes for your team…">${escH(task.notes || '')}</textarea>
                     </div>`;
 
                 projectTodoList.appendChild(li);
@@ -747,6 +762,8 @@ document.addEventListener('DOMContentLoaded', () => {
             projectTaskText.value     = task ? task.text     : '';
             projectTaskAssignee.value = task ? task.assignee : 'Mohammed';
             projectTaskEditId.value   = task ? task.id       : '';
+            document.getElementById('projectTaskDueDate').value = task ? (task.dueDate || '') : '';
+            document.getElementById('projectTaskDueType').value = task ? (task.dueType || 'hard') : 'hard';
             projectTaskModal.style.display = 'flex';
             setTimeout(() => projectTaskText.focus(), 50);
         }
@@ -757,12 +774,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const text     = projectTaskText.value.trim();
             const assignee = projectTaskAssignee.value;
             const editId   = projectTaskEditId.value;
+            const dueDate  = document.getElementById('projectTaskDueDate').value || null;
+            const dueType  = document.getElementById('projectTaskDueType').value || null;
             if (!text) return;
             if (editId) {
-                const t = projectTasks.find(t => t.id === parseInt(editId));
-                if (t) { t.text = text; t.assignee = assignee; }
+                const t = projectTasks.find(t => t.id == editId);
+                if (t) { t.text = text; t.assignee = assignee; t.dueDate = dueDate; t.dueType = dueDate ? dueType : null; }
             } else {
-                projectTasks.push({ id: Date.now(), text, assignee, completed: false, notes: '' });
+                projectTasks.push({ id: uid(), text, assignee, completed: false, notes: '', dueDate, dueType: dueDate ? dueType : null });
             }
             saveProjectTasks(); renderProjectTasks();
             projectTaskModal.style.display = 'none';
@@ -844,8 +863,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const d = loadTimeData();
             const active = d.activeSessions[user];
             if (!active) return;
-            const dur = Math.floor((Date.now() - active.startTime) / 1000);
-            if (dur > 0) d.sessions.push({ id: Date.now(), user, taskId: active.taskId, taskName: active.taskName, duration: dur });
+            const dur = Math.min(Math.floor((Date.now() - active.startTime) / 1000), MAX_SESSION_SEC);
+            if (dur > 0) d.sessions.push({ id: uid(), user, taskId: active.taskId, taskName: active.taskName, duration: dur, endedAt: Date.now() });
             d.activeSessions[user] = null;
             saveTimeData(d);
             renderTimerUI();
@@ -857,8 +876,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const active = d.activeSessions[user];
             if (active && active.taskId == taskId) { stopTimer(); return; }
             if (active) {
-                const dur = Math.floor((Date.now() - active.startTime) / 1000);
-                if (dur > 0) d.sessions.push({ id: Date.now(), user, taskId: active.taskId, taskName: active.taskName, duration: dur });
+                const dur = Math.min(Math.floor((Date.now() - active.startTime) / 1000), MAX_SESSION_SEC);
+                if (dur > 0) d.sessions.push({ id: uid(), user, taskId: active.taskId, taskName: active.taskName, duration: dur, endedAt: Date.now() });
             }
             const task = projectTasks.find(t => t.id == taskId);
             d.activeSessions[user] = { taskId, taskName: task ? task.text : null, startTime: Date.now() };
@@ -867,8 +886,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function renderTimerUI() {
-            const user   = getCurrentUser();
-            const d      = loadTimeData();
+            const user = getCurrentUser();
+            const d    = loadTimeData();
+            if (user && d.activeSessions[user]) {
+                const stale = (Date.now() - d.activeSessions[user].startTime) / 1000;
+                if (stale > MAX_SESSION_SEC) {
+                    const act = d.activeSessions[user];
+                    d.sessions.push({ id: uid(), user, taskId: act.taskId, taskName: act.taskName, duration: MAX_SESSION_SEC, endedAt: Date.now() });
+                    d.activeSessions[user] = null;
+                    saveTimeData(d);
+                }
+            }
             const active = user ? d.activeSessions[user] : null;
 
             const mSec = getUserTotal(d, 'MOHAMMED');
@@ -938,13 +966,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('startTimerBtn')?.addEventListener('click', () => {
             const user = getCurrentUser(); if (!user) return;
             const sel    = document.getElementById('timerTaskSelect');
-            const taskId = sel && sel.value ? parseInt(sel.value) : null;
-            const task   = taskId ? projectTasks.find(t => t.id === taskId) : null;
+            const taskId = sel && sel.value ? sel.value : null;
+            const task   = taskId ? projectTasks.find(t => t.id == taskId) : null;
             const d      = loadTimeData();
             const existing = d.activeSessions[user];
             if (existing) {
-                const dur = Math.floor((Date.now() - existing.startTime) / 1000);
-                if (dur > 0) d.sessions.push({ id: Date.now(), user, taskId: existing.taskId, taskName: existing.taskName, duration: dur });
+                const dur = Math.min(Math.floor((Date.now() - existing.startTime) / 1000), MAX_SESSION_SEC);
+                if (dur > 0) d.sessions.push({ id: uid(), user, taskId: existing.taskId, taskName: existing.taskName, duration: dur, endedAt: Date.now() });
             }
             d.activeSessions[user] = { taskId, taskName: task ? task.text : null, startTime: Date.now() };
             saveTimeData(d);
@@ -955,7 +983,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         projectTodoList.addEventListener('click', e => {
             const btn = e.target.closest('.task-timer-btn');
-            if (btn) trackTask(parseInt(btn.dataset.taskTimer));
+            if (btn) trackTask(btn.dataset.taskTimer);
         });
 
         document.getElementById('timerCollapseBtn')?.addEventListener('click', () => {
@@ -983,7 +1011,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 _fbSync = true;
                 projectTasks = val;
                 localStorage.setItem('projectTasks_' + projectId, JSON.stringify(projectTasks));
-                renderProjectTasks();
+                const ae = document.activeElement;
+                if (!ae || !ae.classList.contains('notes-textarea')) renderProjectTasks();
                 _fbSync = false;
             } else if (projectTasks.length > 0) {
                 db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
@@ -999,6 +1028,69 @@ document.addEventListener('DOMContentLoaded', () => {
                 const local = JSON.parse(localStorage.getItem(TIME_KEY));
                 if (local) db.ref('data/projectTimeByProject/' + projectId).set(local);
             }
+        });
+
+        // ── Project Brief ─────────────────────────────────────────────────────
+        function renderBrief(data) {
+            const emptyEl  = document.getElementById('briefEmpty');
+            const existsEl = document.getElementById('briefExists');
+            if (!data) {
+                if (emptyEl)  emptyEl.style.display  = 'block';
+                if (existsEl) existsEl.style.display = 'none';
+            } else {
+                if (emptyEl)  emptyEl.style.display  = 'none';
+                if (existsEl) existsEl.style.display = 'block';
+                const fnEl = document.getElementById('briefFilename');
+                const ubEl = document.getElementById('briefUpdatedBy');
+                if (fnEl) fnEl.textContent = data.filename || 'brief.html';
+                if (ubEl) ubEl.textContent = data.updatedBy ? `Updated by ${data.updatedBy}` : '';
+            }
+        }
+
+        function handleBriefUpload(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                db.ref('data/projectBriefByProject/' + projectId).set({
+                    html: e.target.result,
+                    filename: file.name,
+                    updatedAt: Date.now(),
+                    updatedBy: getCurrentUser()
+                });
+            };
+            reader.readAsText(file);
+        }
+
+        document.getElementById('briefUploadInput')?.addEventListener('change', function () {
+            handleBriefUpload(this.files[0]); this.value = '';
+        });
+        document.getElementById('briefReplaceInput')?.addEventListener('change', function () {
+            handleBriefUpload(this.files[0]); this.value = '';
+        });
+        document.getElementById('briefViewBtn')?.addEventListener('click', () => {
+            db.ref('data/projectBriefByProject/' + projectId).once('value', snap => {
+                const data = snap.val(); if (!data) return;
+                const overlay = document.getElementById('briefOverlay');
+                const iframe  = document.getElementById('briefIframe');
+                const title   = document.getElementById('briefOverlayTitle');
+                if (title)   title.textContent = data.filename || 'Brief';
+                if (iframe)  iframe.srcdoc = data.html;
+                if (overlay) overlay.style.display = 'flex';
+            });
+        });
+        document.getElementById('briefCloseBtn')?.addEventListener('click', () => {
+            const overlay = document.getElementById('briefOverlay');
+            if (overlay) { overlay.style.display = 'none'; }
+            const iframe = document.getElementById('briefIframe');
+            if (iframe) iframe.srcdoc = '';
+        });
+        document.getElementById('briefRemoveBtn')?.addEventListener('click', () => {
+            if (!confirm('Remove this brief?')) return;
+            db.ref('data/projectBriefByProject/' + projectId).remove();
+        });
+
+        db.ref('data/projectBriefByProject/' + projectId).on('value', snap => {
+            renderBrief(snap.val());
         });
 
         setInterval(renderTimerUI, 1000);
