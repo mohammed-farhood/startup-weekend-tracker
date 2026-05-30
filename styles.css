@@ -885,6 +885,26 @@ section h2 {
   transform: translateY(-1px);
 }
 
+/* ── Inline time editing ─────────────────────────────────────────────────────── */
+.time-block-value.time-editable { cursor: pointer; }
+.time-block-value.time-editable:hover {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  color: var(--accent);
+}
+.time-edit-input {
+  width: 100%;
+  max-width: 96px;
+  font: inherit;
+  text-align: center;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 2px 4px;
+  background: var(--bg-pure);
+  color: var(--text);
+  outline: none;
+}
+
 /* ── Modals & Login ──────────────────────────────────────────────────────────── */
 .login-overlay, .modal-overlay {
   position: fixed;

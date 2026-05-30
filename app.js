@@ -1389,6 +1389,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // ── Time Tracker ─────────────────────────────────────────────────────────
         const TIME_KEY = 'projectTime_' + projectId;
+        let editingTimeUser = null;   // user whose time block is being inline-edited (don't let render clobber it)
 
         function getCurrentUser() { return localStorage.getItem('currentUser'); }
         const ALL_USERS = ['MOHAMMED', 'EYAD', 'YUSUF'];
@@ -1524,9 +1525,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const eEl     = document.getElementById('eyadTime');
             const yEl     = document.getElementById('yusufTime');
             if (totalEl) totalEl.textContent = tSec >= 1 ? fmtDuration(tSec) : '—';
-            if (mEl)     mEl.textContent     = mSec >= 1 ? fmtDuration(mSec) : '—';
-            if (eEl)     eEl.textContent     = eSec >= 1 ? fmtDuration(eSec) : '—';
-            if (yEl)     yEl.textContent     = ySec >= 1 ? fmtDuration(ySec) : '—';
+            [['MOHAMMED', mEl, mSec], ['EYAD', eEl, eSec], ['YUSUF', yEl, ySec]].forEach(([u, el, sec]) => {
+                if (!el || editingTimeUser === u) return;   // don't overwrite an in-progress inline edit
+                el.textContent = sec >= 1 ? fmtDuration(sec) : '—';
+            });
 
             const idlePanel = document.getElementById('timerIdlePanel');
             const runPanel  = document.getElementById('timerRunningPanel');
@@ -1576,6 +1578,81 @@ document.addEventListener('DOMContentLoaded', () => {
                     btn.classList.toggle('tracking', tracking);
                     btn.title = tracking ? 'Stop tracking this task' : 'Track time on this task';
                 }
+            });
+        }
+
+        // ── Inline time editing: tap a person's total, type the corrected value ────
+        function committedUserTotal(d, user) {
+            return d.sessions.filter(s => s.user === user).reduce((a, s) => a + (s.duration || 0), 0);
+        }
+        function fmtHM(sec) {
+            sec = Math.max(0, Math.floor(sec));
+            const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+            if (h && m) return `${h}h ${m}m`;
+            if (h)      return `${h}h`;
+            return `${m}m`;
+        }
+        // Accepts "2h 30m", "2h", "45m", "1.5h", or a bare number (= minutes). Returns seconds, or null if unparseable.
+        function parseTimeInput(str) {
+            if (str == null) return null;
+            str = String(str).trim().toLowerCase();
+            if (!str) return null;
+            const hM = str.match(/(\d+(?:\.\d+)?)\s*h/);
+            const mM = str.match(/(\d+(?:\.\d+)?)\s*m/);
+            let sec = 0, matched = false;
+            if (hM) { sec += parseFloat(hM[1]) * 3600; matched = true; }
+            if (mM) { sec += parseFloat(mM[1]) * 60;   matched = true; }
+            if (!matched) {
+                const n = parseFloat(str);
+                if (isNaN(n)) return null;
+                sec = n * 60;   // bare number = minutes
+            }
+            return Math.max(0, Math.round(sec));
+        }
+        function commitTimeEdit(user, raw) {
+            const target = parseTimeInput(raw);
+            editingTimeUser = null;
+            if (target == null) { renderTimerUI(); return; }   // unparseable → leave as-is
+            const d = loadTimeData();
+            const delta = target - committedUserTotal(d, user);
+            if (delta !== 0) {
+                d.sessions.push({ id: uid(), user, taskId: null, taskName: 'Manual adjustment', duration: delta, endedAt: Date.now(), manual: true });
+            }
+            saveTimeData(d);
+            renderTimerUI();
+        }
+        function beginEditTime(user, el) {
+            if (!el || editingTimeUser) return;
+            editingTimeUser = user;
+            const cur = getUserTotal(loadTimeData(), user);
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'time-edit-input';
+            input.value = fmtHM(cur);
+            el.textContent = '';
+            el.appendChild(input);
+            input.focus();
+            input.select();
+            let done = false;
+            const finish = save => {
+                if (done) return; done = true;
+                if (save) commitTimeEdit(user, input.value);
+                else { editingTimeUser = null; renderTimerUI(); }
+            };
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter')  { e.preventDefault(); finish(true); }
+                if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+            input.addEventListener('blur', () => finish(true));
+        }
+        function setupTimeEditing() {
+            [['MOHAMMED', 'mohammedTime'], ['EYAD', 'eyadTime'], ['YUSUF', 'yusufTime']].forEach(([user, id]) => {
+                const el = document.getElementById(id);
+                if (!el || el.dataset.editWired) return;
+                el.dataset.editWired = '1';
+                el.classList.add('time-editable');
+                el.title = `Click to edit ${user[0]}${user.slice(1).toLowerCase()}'s time`;
+                el.addEventListener('click', () => beginEditTime(user, el));
             });
         }
 
@@ -1855,6 +1932,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         setInterval(renderTimerUI, 1000);
         populateTimerSelect();
+        setupTimeEditing();
         renderTimerUI();
         renderRoadmap();
     }
