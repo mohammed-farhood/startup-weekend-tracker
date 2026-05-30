@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let tasks    = JSON.parse(localStorage.getItem('tasks'))    || [];
     let dayTodos = JSON.parse(localStorage.getItem('dayTodos')) || {};
     let projects = JSON.parse(localStorage.getItem('savedProjects')) || [];
+    let projectTasksByProject = {};
 
     let _fbSync = false;
 
@@ -58,6 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
             watch('tasks',         'tasks',         v => { tasks = v; },    () => { renderAll(); renderTasks(); });
             watch('dayTodos',      'dayTodos',      v => { dayTodos = v; }, renderAll);
             watch('savedProjects', 'savedProjects', v => { projects = v; }, renderProjects);
+            // Read-only listener: project tasks written by the project page, consumed here for progress bars
+            db.ref('data/projectTasksByProject').on('value', snap => {
+                projectTasksByProject = snap.val() || {};
+                renderProjects();
+            });
         }
     })();
 
@@ -90,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (weekLabel) {
             weekLabel.textContent = s.getMonth() === e.getMonth()
                 ? `${months[s.getMonth()]} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`
-                : `${months[s.getMonth()]} ${s.getDate()} – ${months[e.getMonth()]} ${e.getDate()}`;
+                : `${months[s.getMonth()]} ${s.getDate()} – ${months[e.getMonth()]} ${e.getDate()}, ${s.getFullYear()}`;
         }
 
         const dayNames = ['Sat','Sun','Mon','Tue','Wed','Thu','Fri'];
@@ -259,8 +265,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const completedSubs = (task.subtasks || []).filter(s => s.completed).length;
             const totalSubs     = (task.subtasks || []).length;
             const assigneeClass = task.assignee === 'Mohammed' ? 'tag-mohammed' : task.assignee === 'Yusuf' ? 'tag-yusuf' : 'tag-eyad';
-            const proj = PROJECTS.find(p => p.id === (task.projectId || 'none'));
-            const tagHtml = proj && proj.id !== 'none'
+            const proj = (task.projectId && task.projectId !== 'none')
+                ? projects.find(p => String(p.id) === String(task.projectId))
+                : null;
+            const tagHtml = proj
                 ? `<span class="project-tag" style="background:${proj.color}1A;color:${proj.color};border:1px solid ${proj.color}33">${proj.name}</span>`
                 : '';
 
@@ -445,6 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderDayDetail() {
+        if (!currentDay) return;
         const ds = currentDay;
         const todayEvents = events.filter(e => e.date === ds);
         dayEventsList.innerHTML = '';
@@ -528,11 +537,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Projects (dashboard) ──────────────────────────────────────────────────
     const PROJECT_COLORS = ['#C2620E','#7C3AED','#059669','#2563EB','#E11D48'];
     let selectedProjectColor = PROJECT_COLORS[0];
+    let selectedProjectOwner = 'Mohammed';
+
+    function rebuildTaskProjectSelect() {
+        if (!taskProjectSelect) return;
+        const cur = taskProjectSelect.value;
+        taskProjectSelect.innerHTML = '<option value="none">No project</option>';
+        projects.forEach(proj => {
+            const opt = document.createElement('option');
+            opt.value = String(proj.id);
+            opt.textContent = proj.name;
+            taskProjectSelect.appendChild(opt);
+        });
+        const valid = [...taskProjectSelect.options].some(o => o.value === cur);
+        taskProjectSelect.value = valid ? cur : 'none';
+    }
 
     function renderProjects() {
         const list = document.getElementById('projectList');
         if (!list) return;
         list.innerHTML = '';
+        rebuildTaskProjectSelect();
         if (projects.length === 0) {
             const p = document.createElement('p');
             p.style.cssText = 'color:var(--text-faint);font-size:0.875rem;font-style:italic;padding:16px 0;';
@@ -540,21 +565,66 @@ document.addEventListener('DOMContentLoaded', () => {
             list.appendChild(p);
             return;
         }
-        projects.forEach(proj => {
+
+        const BORN_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const active  = projects.filter(p => (p.status || 'active') === 'active');
+        const passive = projects.filter(p => (p.status || 'active') === 'passive');
+
+        [...active, ...passive].forEach(proj => {
+            const isPassive = (proj.status || 'active') === 'passive';
+
+            // Compute real progress from Agent A's data
+            const rawTasks = projectTasksByProject[String(proj.id)];
+            const projTasks = Array.isArray(rawTasks) ? rawTasks
+                : (rawTasks ? Object.values(rawTasks) : []);
+            const total = projTasks.length;
+            const done  = projTasks.filter(t => t.completed).length;
+            const pct   = total ? Math.round((done / total) * 100) : 0;
+            const progressText = total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`;
+
+            // Owner badge
+            const ownerClass = proj.owner === 'Mohammed' ? 'mohammed'
+                : proj.owner === 'Yusuf' ? 'yusuf'
+                : proj.owner === 'Eyad'  ? 'eyad' : '';
+            const ownerHtml = proj.owner
+                ? `<span class="proj-owner-badge ${ownerClass}" title="${proj.owner}">${proj.owner[0].toUpperCase()}</span>`
+                : '';
+
+            // Born date
+            let bornHtml = '';
+            if (proj.createdAt) {
+                const d = new Date(proj.createdAt);
+                bornHtml = `<span class="proj-born">Born ${BORN_MONTHS[d.getMonth()]} ${d.getDate()}</span>`;
+            }
+
             const card = document.createElement('div');
-            card.className = 'project-card';
+            card.className = 'project-card' + (isPassive ? ' project-passive' : '');
             card.innerHTML = `
                 <div class="project-card-top">
                     <span class="project-color-dot" style="background:${proj.color}"></span>
                     <div class="project-info">
                         <h3>${proj.name}</h3>
-                        <p>Tap to manage tasks</p>
+                        <div class="proj-meta-row">
+                            ${bornHtml}
+                            <span class="proj-progress-text">${progressText}</span>
+                        </div>
                     </div>
-                    <button class="project-delete-btn" data-id="${proj.id}" title="Delete project">✕</button>
+                    <div class="proj-card-actions">
+                        ${ownerHtml}
+                        <span class="proj-status-badge ${isPassive ? 'passive' : 'active'}">${isPassive ? 'Paused' : 'Active'}</span>
+                        <button class="proj-status-toggle" title="${isPassive ? 'Resume project' : 'Pause project'}">${isPassive ? '▶' : '⏸'}</button>
+                        <button class="project-delete-btn" title="Delete project">✕</button>
+                    </div>
                 </div>
                 <div class="progress-bar-container">
-                    <div class="progress-bar" style="width:0%;background:${proj.color}"></div>
+                    <div class="progress-bar" style="width:${pct}%;background:${proj.color}"></div>
                 </div>`;
+
+            card.querySelector('.proj-status-toggle').addEventListener('click', e => {
+                e.preventDefault(); e.stopPropagation();
+                proj.status = isPassive ? 'active' : 'passive';
+                saveProjects(); renderProjects();
+            });
             card.querySelector('.project-delete-btn').addEventListener('click', e => {
                 e.preventDefault(); e.stopPropagation();
                 if (!confirm(`Delete "${proj.name}"?`)) return;
@@ -562,7 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 saveProjects(); renderProjects();
             });
             card.addEventListener('click', e => {
-                if (e.target.closest('.project-delete-btn')) return;
+                if (e.target.closest('.project-delete-btn') || e.target.closest('.proj-status-toggle')) return;
                 sessionStorage.setItem('activeProject', JSON.stringify(proj));
                 window.location.href = 'project.html';
             });
@@ -576,9 +646,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('addProjectBtn')?.addEventListener('click', () => {
         projectNameInput.value = '';
         selectedProjectColor = PROJECT_COLORS[0];
+        selectedProjectOwner = 'Mohammed';
         document.querySelectorAll('.color-dot-btn').forEach((btn, i) => {
             btn.classList.toggle('active', i === 0);
         });
+        const ownerSel = document.getElementById('projectOwnerSelect');
+        if (ownerSel) ownerSel.value = 'Mohammed';
         addProjectModal.style.display = 'flex';
         setTimeout(() => projectNameInput.focus(), 50);
     });
@@ -586,7 +659,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('saveAddProjectBtn')?.addEventListener('click', () => {
         const name = projectNameInput.value.trim();
         if (!name) return;
-        projects.push({ id: Date.now(), name, color: selectedProjectColor });
+        const ts = Date.now();
+        projects.push({ id: ts, name, color: selectedProjectColor, owner: selectedProjectOwner, status: 'active', createdAt: ts });
         saveProjects(); renderProjects();
         addProjectModal.style.display = 'none';
     });
@@ -599,6 +673,10 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedProjectColor = btn.dataset.color;
         document.querySelectorAll('.color-dot-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+    });
+
+    document.getElementById('projectOwnerSelect')?.addEventListener('change', e => {
+        selectedProjectOwner = e.target.value;
     });
 
     // ── Calendar Widget (collapse/expand) ─────────────────────────────────────
