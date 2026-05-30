@@ -848,6 +848,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
         const MAX_SESSION_SEC = 8 * 3600;
 
+        // ── Origin card ───────────────────────────────────────────────────────
+        if (activeProj) {
+            const originCard = document.getElementById('projectOriginCard');
+            if (originCard) {
+                let hasAny = false;
+                if (activeProj.createdAt) {
+                    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    const d = new Date(activeProj.createdAt);
+                    const bornEl = document.getElementById('originBorn');
+                    if (bornEl) {
+                        document.getElementById('originBornVal').textContent = `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+                        bornEl.style.display = '';
+                        hasAny = true;
+                    }
+                }
+                if (activeProj.pitchedBy) {
+                    const el = document.getElementById('originPitched');
+                    if (el) { document.getElementById('originPitchedVal').textContent = activeProj.pitchedBy; el.style.display = ''; hasAny = true; }
+                }
+                if (activeProj.owner) {
+                    const el = document.getElementById('originOwner');
+                    if (el) { document.getElementById('originOwnerVal').textContent = activeProj.owner; el.style.display = ''; hasAny = true; }
+                }
+                if (activeProj.idea) {
+                    const el = document.getElementById('originIdea');
+                    if (el) { document.getElementById('originIdeaVal').textContent = activeProj.idea; el.style.display = ''; hasAny = true; }
+                }
+                if (hasAny) originCard.style.display = '';
+            }
+        }
+
         // Delete whole project button — placed after projectTasks/saveProjectTasks to avoid temporal dead zone
         document.getElementById('deleteProjectBtn')?.addEventListener('click', () => {
             const proj = JSON.parse(sessionStorage.getItem('activeProject'));
@@ -886,7 +917,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const todayStr = new Date().toISOString().slice(0, 10);
             projectTasks.forEach(task => {
-                const assigneeClass = task.assignee === 'Mohammed' ? 'tag-mohammed' : task.assignee === 'Yusuf' ? 'tag-yusuf' : 'tag-eyad';
+                const assigneeClass = task.assignee === 'Mohammed' ? 'tag-mohammed'
+                    : task.assignee === 'Yusuf' ? 'tag-yusuf'
+                    : task.assignee === 'Eyad' ? 'tag-eyad'
+                    : 'tag-floating';
+                const assigneeLabel = task.assignee || 'Floating';
+                let blockedChip = '';
+                if (task.blockedBy) {
+                    const blocker = projectTasks.find(b => b.id == task.blockedBy);
+                    if (blocker && !blocker.completed) {
+                        blockedChip = `<span class="blocked-chip">🔒 blocked by ${escH(blocker.text)}</span>`;
+                    }
+                }
                 let dueDateChip = '';
                 if (task.dueDate) {
                     const overdue = task.dueDate < todayStr && !task.completed;
@@ -909,8 +951,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             </label>
                         </div>
                         <div class="todo-right">
+                            ${blockedChip}
                             ${dueDateChip}
-                            <span class="assignee ${assigneeClass}">${escH(task.assignee)}</span>
+                            <span class="assignee ${assigneeClass}">${escH(assigneeLabel)}</span>
                             <span class="task-time-chip" id="task-time-${task.id}" style="display:none;"></span>
                             <button class="task-action-btn task-timer-btn" data-task-timer="${task.id}" title="Track time on this task">⏱</button>
                             <button class="notes-toggle-btn task-action-btn" title="Notes">${task.notes ? '📝' : '✎'} Notes</button>
@@ -925,7 +968,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 projectTodoList.appendChild(li);
 
                 li.querySelector('.todo-checkbox').addEventListener('change', function () {
-                    task.completed = this.checked;
+                    const liveTask = projectTasks.find(x => x.id == task.id) || task;
+                    liveTask.completed = this.checked;
+                    liveTask.completedAt = this.checked ? Date.now() : null;
                     li.classList.toggle('completed', this.checked);
                     saveProjectTasks(); updateProjectProgress();
                 });
@@ -942,7 +987,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     saveProjectTasks(); renderProjectTasks();
                 });
                 li.querySelector('.notes-textarea').addEventListener('input', function () {
-                    task.notes = this.value;
+                    const liveTask = projectTasks.find(x => x.id == task.id) || task;
+                    liveTask.notes = this.value;
                     li.querySelector('.notes-toggle-btn').innerHTML = this.value.trim() ? '📝 Notes' : '✎ Notes';
                     saveProjectTasks();
                 });
@@ -958,10 +1004,22 @@ document.addEventListener('DOMContentLoaded', () => {
         function openProjectTaskModal(task = null) {
             document.getElementById('projectTaskModalTitle').textContent = task ? 'Edit Task' : 'Add Task';
             projectTaskText.value     = task ? task.text     : '';
-            projectTaskAssignee.value = task ? task.assignee : 'Mohammed';
+            projectTaskAssignee.value = task ? (task.assignee ?? 'Mohammed') : 'Mohammed';
             projectTaskEditId.value   = task ? task.id       : '';
             document.getElementById('projectTaskDueDate').value = task ? (task.dueDate || '') : '';
             document.getElementById('projectTaskDueType').value = task ? (task.dueType || 'hard') : 'hard';
+            const blockedSel = document.getElementById('projectTaskBlockedBy');
+            if (blockedSel) {
+                blockedSel.innerHTML = '<option value="">None</option>';
+                projectTasks.forEach(t => {
+                    if (task && t.id == task.id) return;
+                    const o = document.createElement('option');
+                    o.value = t.id;
+                    o.textContent = t.text.length > 45 ? t.text.slice(0, 45) + '…' : t.text;
+                    blockedSel.appendChild(o);
+                });
+                blockedSel.value = task ? (task.blockedBy || '') : '';
+            }
             projectTaskModal.style.display = 'flex';
             setTimeout(() => projectTaskText.focus(), 50);
         }
@@ -969,17 +1027,18 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('addProjectTaskBtn')?.addEventListener('click', () => openProjectTaskModal());
         document.getElementById('cancelProjectTaskBtn')?.addEventListener('click', () => { projectTaskModal.style.display = 'none'; });
         document.getElementById('saveProjectTaskBtn')?.addEventListener('click', () => {
-            const text     = projectTaskText.value.trim();
-            const assignee = projectTaskAssignee.value;
-            const editId   = projectTaskEditId.value;
-            const dueDate  = document.getElementById('projectTaskDueDate').value || null;
-            const dueType  = document.getElementById('projectTaskDueType').value || null;
+            const text      = projectTaskText.value.trim();
+            const assignee  = projectTaskAssignee.value;
+            const editId    = projectTaskEditId.value;
+            const dueDate   = document.getElementById('projectTaskDueDate').value || null;
+            const dueType   = document.getElementById('projectTaskDueType').value || null;
+            const blockedBy = document.getElementById('projectTaskBlockedBy')?.value || null;
             if (!text) return;
             if (editId) {
                 const t = projectTasks.find(t => t.id == editId);
-                if (t) { t.text = text; t.assignee = assignee; t.dueDate = dueDate; t.dueType = dueDate ? dueType : null; }
+                if (t) { t.text = text; t.assignee = assignee; t.dueDate = dueDate; t.dueType = dueDate ? dueType : null; t.blockedBy = blockedBy; }
             } else {
-                projectTasks.push({ id: uid(), text, assignee, completed: false, notes: '', dueDate, dueType: dueDate ? dueType : null });
+                projectTasks.push({ id: uid(), text, assignee, completed: false, completedAt: null, notes: '', dueDate, dueType: dueDate ? dueType : null, blockedBy });
             }
             saveProjectTasks(); renderProjectTasks();
             projectTaskModal.style.display = 'none';
@@ -1245,8 +1304,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // TODO: move briefs to Firebase Storage to avoid bloating the Realtime DB node
         function handleBriefUpload(file) {
             if (!file) return;
+            if (file.size > 800 * 1024) {
+                alert('This file is too large (' + Math.round(file.size / 1024) + ' KB). Please use a brief under 800 KB — remove embedded images or link them externally instead.');
+                return;
+            }
             const reader = new FileReader();
             reader.onload = e => {
                 db.ref('data/projectBriefByProject/' + projectId).set({

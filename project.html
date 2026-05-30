@@ -56,6 +56,63 @@
             box-sizing: border-box;
         }
 
+        /* ── Floating & blocked chips ────────────────────────────── */
+        .tag-floating {
+            background: rgba(156, 163, 175, 0.12);
+            color: var(--color-text-muted, #9CA3AF);
+            border: 1px solid rgba(156, 163, 175, 0.2);
+            font-style: italic;
+        }
+        .blocked-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            background: rgba(234, 179, 8, 0.1);
+            color: #A16207;
+            border: 1px solid rgba(234, 179, 8, 0.25);
+            margin-right: 4px;
+            max-width: 180px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* ── Origin card ─────────────────────────────────────────── */
+        .project-origin-card {
+            margin: 0 24px 4px;
+            padding: 14px 18px;
+            background: rgba(194, 98, 14, 0.05);
+            border: 1px solid rgba(194, 98, 14, 0.15);
+            border-radius: 10px;
+        }
+        .origin-field {
+            display: none;
+            align-items: baseline;
+            gap: 10px;
+            padding: 3px 0;
+        }
+        .origin-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #C2620E;
+            min-width: 80px;
+            flex-shrink: 0;
+        }
+        .origin-value {
+            font-size: 13px;
+            color: var(--color-text, #1C1917);
+            line-height: 1.5;
+        }
+        #originIdea .origin-value {
+            font-style: italic;
+            color: var(--color-text-muted, #78716C);
+        }
+
         /* ── Project Brief section ────────────────────────────────── */
         .project-brief-section {
             padding: 24px;
@@ -190,6 +247,7 @@
             <h3 id="projectTaskModalTitle">Add Task</h3>
             <input type="text" id="projectTaskText" placeholder="Task description">
             <select id="projectTaskAssignee" class="select-input">
+                <option value="">Unassigned (floating)</option>
                 <option value="Mohammed">Mohammed</option>
                 <option value="Eyad">Eyad</option>
                 <option value="Yusuf">Yusuf</option>
@@ -201,6 +259,11 @@
                 <select id="projectTaskDueType" class="select-input">
                     <option value="hard">Hard deadline</option>
                     <option value="loose">Loose / soft</option>
+                </select>
+            </div>
+            <div style="margin-top:6px;">
+                <select id="projectTaskBlockedBy" class="select-input">
+                    <option value="">Not blocked</option>
                 </select>
             </div>
             <input type="hidden" id="projectTaskEditId" value="">
@@ -252,6 +315,26 @@
                 </div>
             </div>
         </section>
+
+        <!-- Origin card — populated by JS from activeProj if fields exist -->
+        <div class="project-origin-card" id="projectOriginCard" style="display:none;">
+            <div class="origin-field" id="originBorn">
+                <span class="origin-label">Born</span>
+                <span class="origin-value" id="originBornVal"></span>
+            </div>
+            <div class="origin-field" id="originPitched">
+                <span class="origin-label">Pitched by</span>
+                <span class="origin-value" id="originPitchedVal"></span>
+            </div>
+            <div class="origin-field" id="originOwner">
+                <span class="origin-label">Owner</span>
+                <span class="origin-value" id="originOwnerVal"></span>
+            </div>
+            <div class="origin-field" id="originIdea">
+                <span class="origin-label">Idea</span>
+                <span class="origin-value" id="originIdeaVal"></span>
+            </div>
+        </div>
 
         <section class="project-tasks">
             <div class="section-header">
