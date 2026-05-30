@@ -233,6 +233,8 @@
         /* ── Roadmap (tiers → steps journey map) ── */
         .roadmap-section { margin-top: 4px; }
         .roadmap-meta { font-family:'Instrument Sans',sans-serif; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--color-text-muted,#8a8175); margin-left:8px; font-weight:500; }
+        .roadmap-add-btn { background:none; border:1px solid var(--border,#e3dccf); color:var(--accent-deep,#9B4E0B); font-family:'Instrument Sans',sans-serif; font-size:0.8rem; font-weight:500; padding:6px 15px; border-radius:20px; cursor:pointer; white-space:nowrap; transition:all 140ms ease; }
+        .roadmap-add-btn:hover { background:var(--accent-glow,rgba(194,98,14,0.10)); border-color:var(--accent,#C2620E); }
         .roadmap { display:flex; flex-direction:column; gap:7px; }
         .rm-empty { font-size:0.85rem; line-height:1.55; color:var(--color-text-muted,#8a8175); padding:16px 18px; background:var(--surface,#F0E9DD); border:1px dashed var(--border,#e3dccf); border-radius:8px; }
         .rm-empty b { color:var(--accent-deep,#9B4E0B); font-weight:600; }
@@ -382,7 +384,7 @@
         <section class="roadmap-section">
             <div class="section-header">
                 <h2>Roadmap <span id="roadmapMeta" class="roadmap-meta"></span></h2>
-                <button id="addTierBtn" class="icon-btn" title="Add a tier (milestone)">+ Tier</button>
+                <button id="addTierBtn" class="roadmap-add-btn" title="Add a tier (milestone)">+ Tier</button>
             </div>
             <div id="roadmap" class="roadmap"></div>
         </section>
