@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
             watch('tasks',         'tasks',         v => { tasks = v; },    () => { renderAll(); renderTasks(); });
             watch('dayTodos',      'dayTodos',      v => { dayTodos = v; }, renderAll);
             watch('savedProjects', 'savedProjects', v => { projects = v; }, () => {
-                renderProjects(); renderFridayTimeline(); renderCommandCenter();
+                renderProjects(); renderFridayTimeline(); renderCommandCenter(); renderPulse();
             });
             // Read-only listeners: written by project page, consumed here for cards + personal dashboard
             db.ref('data/projectTasksByProject').off();
@@ -73,11 +73,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderProjects();
                 renderYourWeek();
                 renderCommandCenter();
+                renderPulse();
             });
             db.ref('data/projectTimeByProject').off();
             db.ref('data/projectTimeByProject').on('value', snap => {
                 projectTimeByProject = snap.val() || {};
                 renderYourWeek();
+                renderPulse();
             });
         }
     }
@@ -870,6 +872,110 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ── Command Center ("What Needs Me") ──────────────────────────────────────
+    // ── Team Pulse — animated "what happened" review, derived from existing timestamps ──
+    let _pulseSeen = false;
+    function renderPulse() {
+        const feedEl    = document.getElementById('pulseFeed');
+        const insightEl = document.getElementById('pulseInsight');
+        if (!feedEl) return;
+
+        const projName = {};
+        projects.forEach(p => { projName[String(p.id)] = p.name; });
+
+        const fmtDur = sec => {
+            sec = Math.floor(sec);
+            if (sec < 3600) return Math.max(1, Math.round(sec / 60)) + 'm';
+            const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+            return m ? h + 'h ' + m + 'm' : h + 'h';
+        };
+        const relTime = ms => {
+            const min = Math.floor((Date.now() - ms) / 60000);
+            if (min < 1)  return 'just now';
+            if (min < 60) return min + 'm ago';
+            const hr = Math.floor(min / 60);
+            if (hr < 24)  return hr + 'h ago';
+            const days = Math.floor(hr / 24);
+            if (days === 1) return 'yesterday';
+            if (days < 7)   return days + 'd ago';
+            const d = new Date(ms);
+            return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] + ' ' + d.getDate();
+        };
+
+        // One gentle insight line, scoped to this (Saturday-start) week
+        function computeInsight() {
+            const weekStart = getWeekStart().getTime();
+            let teamSecs = 0;
+            const perProj = {};
+            Object.entries(projectTimeByProject || {}).forEach(([pid, td]) => {
+                if (!td || !Array.isArray(td.sessions)) return;
+                td.sessions.forEach(s => {
+                    if (!s.endedAt || s.endedAt < weekStart) return;
+                    teamSecs += (s.duration || 0);
+                    (perProj[pid] = perProj[pid] || {});
+                    perProj[pid][s.user] = (perProj[pid][s.user] || 0) + (s.duration || 0);
+                });
+            });
+            for (const pid in perProj) {
+                const users = perProj[pid];
+                const total = Object.values(users).reduce((a, b) => a + b, 0);
+                if (total < 3600 || !projName[pid]) continue;
+                const top = Object.entries(users).sort((a, b) => b[1] - a[1])[0];
+                if (top && top[1] / total >= 0.9 && Object.keys(users).length >= 1)
+                    return `${NAME[top[0]] || top[0]} has carried ${projName[pid]} solo this week — worth a hand?`;
+            }
+            if (teamSecs >= 3600) return `The team logged ${fmtDur(teamSecs)} this week 🔥`;
+            if (teamSecs > 0)     return `${fmtDur(teamSecs)} logged this week — momentum building.`;
+            return `A fresh week. The first log sets the pace.`;
+        }
+
+        const acts = [];
+        Object.entries(projectTasksByProject || {}).forEach(([pid, raw]) => {
+            const arr = Array.isArray(raw) ? raw : Object.values(raw || {});
+            arr.forEach(t => {
+                if (t.completed && t.completedAt)
+                    acts.push({ t: t.completedAt, kind: 'done', who: t.assignee || '', what: t.text || '', proj: projName[pid] || '' });
+            });
+        });
+        Object.entries(projectTimeByProject || {}).forEach(([pid, td]) => {
+            if (!td || !Array.isArray(td.sessions)) return;
+            td.sessions.forEach(s => {
+                if (s.endedAt && (s.duration || 0) >= 300)
+                    acts.push({ t: s.endedAt, kind: 'time', who: NAME[s.user] || '', what: s.taskName || '', dur: s.duration, proj: projName[pid] || '' });
+            });
+        });
+        projects.forEach(p => {
+            if (p.createdAt) acts.push({ t: p.createdAt, kind: 'born', who: p.pitchedBy || '', what: p.name || '', proj: '' });
+        });
+        acts.sort((a, b) => b.t - a.t);
+        const top = acts.slice(0, 6);
+
+        if (insightEl) insightEl.textContent = computeInsight();
+
+        if (top.length === 0) {
+            feedEl.innerHTML = `<div class="pulse-empty">No moves yet — what the team does will show up here.</div>`;
+            return;
+        }
+
+        const animate = !_pulseSeen;
+        const ICON = { done: '✓', time: '⏱', born: '⚡' };
+        feedEl.innerHTML = top.map((a, i) => {
+            const cls   = animate ? 'pulse-item animate' : 'pulse-item static';
+            const delay = animate ? ` style="animation-delay:${i * 70}ms"` : '';
+            let line;
+            if (a.kind === 'done')
+                line = `<b>${esc(a.who)}</b> finished “${esc(a.what)}”${a.proj ? ` · ${esc(a.proj)}` : ''}`;
+            else if (a.kind === 'time')
+                line = `<b>${esc(a.who)}</b> logged ${fmtDur(a.dur)}${a.what ? ` on “${esc(a.what)}”` : ''}${a.proj ? ` · ${esc(a.proj)}` : ''}`;
+            else
+                line = `<b>${esc(a.what)}</b> was born${a.who ? `, pitched by ${esc(a.who)}` : ''}`;
+            return `<div class="${cls}"${delay}>`
+                 + `<span class="pulse-ic pulse-ic-${a.kind}">${ICON[a.kind]}</span>`
+                 + `<span class="pulse-txt">${line}</span>`
+                 + `<span class="pulse-when">${relTime(a.t)}</span></div>`;
+        }).join('');
+        if (animate) _pulseSeen = true;
+    }
+
     function renderCommandCenter() {
         const el = document.getElementById('commandCenter');
         if (!el) return;
@@ -1586,6 +1692,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderYourWeek();
             renderCommandCenter();
             renderFridayTimeline();
+            renderPulse();
         }
     }
 
