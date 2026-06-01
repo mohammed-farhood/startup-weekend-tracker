@@ -83,6 +83,11 @@
         <div class="modal-card">
             <h3>Add Event</h3>
             <input type="text" id="eventTitle" placeholder="Event title">
+            <input type="text" id="eventPlace" class="text-input" placeholder="Location (optional)">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <input type="time" id="eventTime" class="text-input" style="flex:1;">
+                <span style="font-size:0.78rem;color:var(--color-text-muted);white-space:nowrap;">Time (optional)</span>
+            </div>
             <input type="date" id="eventDate">
             <div class="modal-actions">
                 <button id="cancelEventBtn" class="text-btn">Cancel</button>
@@ -151,9 +156,23 @@
                         <h4>To-Do</h4>
                         <button class="icon-btn small" id="addDayTodoBtn">+</button>
                     </div>
-                    <div id="dayTodoAddRow" class="add-inline-row" style="display:none;">
+                    <div id="dayTodoAddRow" class="add-inline-row day-todo-add-row" style="display:none;">
                         <input type="text" id="dayTodoInput" class="inline-input" placeholder="New task…">
-                        <button id="saveDayTodoBtn" class="inline-save-btn">Save</button>
+                        <div class="day-todo-meta-row">
+                            <select id="dayTodoProject" class="select-input-sm">
+                                <option value="">No project</option>
+                            </select>
+                            <button type="button" id="dayTodoTsBtn" class="ts-toggle">
+                                <span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 14.5 15.5"/><path d="M5 3l4 2M19 3l-4 2M12 1v2"/></svg></span> Time-sensitive
+                            </button>
+                            <select id="dayTodoAssignee" class="select-input-sm">
+                                <option value="">Overall</option>
+                                <option value="Mohammed">Mohammed</option>
+                                <option value="Eyad">Eyad</option>
+                                <option value="Yusuf">Yusuf</option>
+                            </select>
+                            <button id="saveDayTodoBtn" class="inline-save-btn">Save</button>
+                        </div>
                     </div>
                     <ul id="dayTodoList" class="todo-list day-todo-list"></ul>
                     <p id="dayNoTodos" class="empty-text" style="display:none;">No tasks for this day.</p>
@@ -163,7 +182,7 @@
     </div>
 
     <!-- Main App -->
-    <div class="app-container" style="display: none;" id="mainApp">
+    <div class="app-container" id="mainApp" style="display:none;">
         <header class="app-header">
             <div class="header-logo">
                 <img src="logo.png" alt="Startup Weekend">
@@ -178,113 +197,136 @@
             </div>
         </header>
 
-        <div class="main-grid">
-            <!-- Left Column: Schedule -->
-            <div class="left-col">
-                <section class="calendar-section">
-                    <div class="section-header">
-                        <h2>Schedule</h2>
-                        <button id="addEventBtn" class="icon-btn">+</button>
-                    </div>
-
-                    <!-- Week Strip -->
-                    <div class="week-block">
-                        <div class="week-nav">
-                            <button id="prevWeekBtn" class="cal-nav-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg></span></button>
-                            <span id="weekLabel" class="cal-month-label"></span>
-                            <button id="nextWeekBtn" class="cal-nav-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></span></button>
-                        </div>
-                        <div class="week-strip" id="weekStrip"></div>
-                    </div>
-
-                    <!-- Monthly Calendar (widget — tap to expand) -->
-                    <div class="calendar-container" id="calendarContainer">
-                        <div class="calendar-nav" id="calendarNavBar">
-                            <button id="prevMonthBtn" class="cal-nav-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg></span></button>
-                            <span id="calMonthLabel" class="cal-month-label"></span>
-                            <button id="nextMonthBtn" class="cal-nav-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></span></button>
-                            <button id="calToggleBtn" class="cal-toggle-btn" title="Show calendar"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg></span></button>
-                        </div>
-                        <div class="calendar-expand" id="calendarExpand">
-                            <div class="calendar-header">
-                                <div class="day-name">Sat</div>
-                                <div class="day-name">Sun</div>
-                                <div class="day-name">Mon</div>
-                                <div class="day-name">Tue</div>
-                                <div class="day-name">Wed</div>
-                                <div class="day-name">Thu</div>
-                                <div class="day-name highlighted">Fri</div>
-                            </div>
-                            <div class="calendar-grid" id="calendarGrid"></div>
-                        </div>
-                    </div>
-
-                    <!-- Upcoming Events -->
-                    <div class="events-list" id="eventsList"></div>
-                </section>
+        <!-- FULL-WIDTH: Schedule -->
+        <section class="calendar-section">
+            <div class="section-header">
+                <h2>Schedule</h2>
+                <button id="addEventBtn" class="icon-btn">+</button>
             </div>
 
-            <!-- Right Column: Projects & Tasks -->
-            <div class="right-col">
-                <!-- Team Pulse — animated review of recent team activity -->
-                <section class="pulse-section" id="pulseSection">
-                    <div class="pulse-head">
-                        <span class="pulse-dot"></span>
-                        <h2>Team Pulse</h2>
-                    </div>
-                    <div id="pulseInsight" class="pulse-insight"></div>
-                    <div id="pulseFeed" class="pulse-feed"></div>
-                </section>
-
-                <!-- Your Week Panel -->
-                <section class="your-week-section">
-                    <div class="section-header">
-                        <h2>Your Week</h2>
-                        <div class="yw-avatar-tabs" id="ywAvatarTabs">
-                            <button class="yw-tab" data-user="MOHAMMED" title="Mohammed">M</button>
-                            <button class="yw-tab" data-user="EYAD" title="Eyad">E</button>
-                            <button class="yw-tab" data-user="YUSUF" title="Yusuf">Y</button>
-                        </div>
-                    </div>
-                    <div id="ywStats" class="yw-stats"></div>
-                    <div id="teamStrip" class="team-strip"></div>
-                </section>
-
-                <!-- What Needs Me -->
-                <section class="command-center-section">
-                    <div class="section-header">
-                        <h2>What Needs Me</h2>
-                    </div>
-                    <div id="commandCenter" class="command-center"></div>
-                </section>
-
-                <section class="projects-section">
-                    <div class="section-header">
-                        <h2>Active Projects</h2>
-                        <div class="section-header-actions">
-                            <button id="fridaySessionBtn" class="friday-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Friday</button>
-                            <button id="addProjectBtn" class="icon-btn">+</button>
-                        </div>
-                    </div>
-                    <div class="project-list" id="projectList"></div>
-                </section>
-
-                <!-- Sessions timeline -->
-                <section class="sessions-section">
-                    <div class="section-header">
-                        <h2>Sessions</h2>
-                    </div>
-                    <div id="fridayTimeline" class="friday-timeline"></div>
-                </section>
-
-                <section class="todo-section">
-                    <div class="section-header">
-                        <h2>Quick Tasks</h2>
-                        <button id="addTaskBtn" class="icon-btn">+</button>
-                    </div>
-                    <ul class="todo-list" id="todoList"></ul>
-                </section>
+            <!-- Week Strip -->
+            <div class="week-block">
+                <div class="week-nav">
+                    <button id="prevWeekBtn" class="cal-nav-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg></span></button>
+                    <span id="weekLabel" class="cal-month-label"></span>
+                    <button id="nextWeekBtn" class="cal-nav-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></span></button>
+                </div>
+                <div class="week-strip" id="weekStrip"></div>
             </div>
+
+            <!-- Monthly Calendar (widget — tap to expand) -->
+            <div class="calendar-container" id="calendarContainer">
+                <div class="calendar-nav" id="calendarNavBar">
+                    <button id="prevMonthBtn" class="cal-nav-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg></span></button>
+                    <span id="calMonthLabel" class="cal-month-label"></span>
+                    <button id="nextMonthBtn" class="cal-nav-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></span></button>
+                    <button id="calToggleBtn" class="cal-toggle-btn" title="Show calendar"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg></span></button>
+                </div>
+                <div class="calendar-expand" id="calendarExpand">
+                    <div class="calendar-header">
+                        <div class="day-name">Sat</div>
+                        <div class="day-name">Sun</div>
+                        <div class="day-name">Mon</div>
+                        <div class="day-name">Tue</div>
+                        <div class="day-name">Wed</div>
+                        <div class="day-name">Thu</div>
+                        <div class="day-name highlighted">Fri</div>
+                    </div>
+                    <div class="calendar-grid" id="calendarGrid"></div>
+                </div>
+            </div>
+
+            <!-- Upcoming Events -->
+            <div class="events-list" id="eventsList"></div>
+        </section>
+
+        <!-- TWO-UP ROW: Friday box + Team Pulse -->
+        <div class="two-up-row">
+            <section class="friday-plan-section" id="fridayPlanSection">
+                <div class="friday-plan-head">
+                    <h2>Friday Session</h2>
+                </div>
+                <div class="friday-plan-date" id="fridayPlanDate">Loading…</div>
+                <div class="friday-plan-idea-wrap">
+                    <div class="friday-plan-idea-text friday-plan-empty" id="fridayPlanText" contenteditable="false">What are we building?</div>
+                    <button class="friday-plan-edit-btn" id="fridayPlanEditBtn" title="Edit plan"></button>
+                </div>
+                <div class="friday-plan-actions">
+                    <button id="fridayCreateEventBtn" class="friday-btn" style="margin:0;font-size:0.8rem;padding:7px 14px;"></button>
+                </div>
+            </section>
+            <section class="pulse-section" id="pulseSection">
+                <div class="pulse-head">
+                    <span class="pulse-dot"></span>
+                    <h2>Team Pulse</h2>
+                </div>
+                <div id="pulseInsight" class="pulse-insight"></div>
+                <div id="pulseFeed" class="pulse-feed"></div>
+            </section>
+        </div>
+
+        <!-- TWO-UP ROW: Your Week + What Needs Me -->
+        <div class="two-up-row">
+            <section class="your-week-section">
+                <div class="section-header">
+                    <h2>Your Week</h2>
+                    <div class="yw-avatar-tabs" id="ywAvatarTabs">
+                        <button class="yw-tab" data-user="MOHAMMED" title="Mohammed">M</button>
+                        <button class="yw-tab" data-user="EYAD" title="Eyad">E</button>
+                        <button class="yw-tab" data-user="YUSUF" title="Yusuf">Y</button>
+                    </div>
+                </div>
+                <div id="ywStats" class="yw-stats"></div>
+                <div id="teamStrip" class="team-strip"></div>
+            </section>
+            <section class="command-center-section">
+                <div class="section-header">
+                    <h2>What Needs Me</h2>
+                </div>
+                <div id="commandCenter" class="command-center"></div>
+            </section>
+        </div>
+
+        <!-- FULL WIDTH: Projects, Sessions, Quick Tasks -->
+        <section class="projects-section">
+            <div class="section-header">
+                <h2>Active Projects</h2>
+                <div class="section-header-actions">
+                    <button id="fridaySessionBtn" class="friday-btn"><span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Friday</button>
+                    <button id="addProjectBtn" class="icon-btn">+</button>
+                </div>
+            </div>
+            <div class="project-list" id="projectList"></div>
+        </section>
+
+        <section class="sessions-section">
+            <div class="section-header">
+                <h2>Sessions</h2>
+            </div>
+            <div id="fridayTimeline" class="friday-timeline"></div>
+        </section>
+
+        <section class="todo-section">
+            <div class="section-header">
+                <h2>Quick Tasks</h2>
+                <button id="addTaskBtn" class="icon-btn">+</button>
+            </div>
+            <ul class="todo-list" id="todoList"></ul>
+        </section>
+    </div>
+
+    <!-- Pulse Intro Overlay (B5) -->
+    <div id="pulseIntroOverlay" style="display:none;">
+        <div class="pio-inner" id="pioInner">
+            <div class="pio-header">
+                <span class="pulse-dot"></span>
+                <h1 class="pio-title">Team Pulse</h1>
+            </div>
+            <div class="pio-insight" id="pioInsight"></div>
+            <div class="pio-feed" id="pioFeed"></div>
+            <button class="pio-dismiss-btn" id="pioDismissBtn" style="opacity:0;pointer-events:none;">
+                Continue →
+            </button>
         </div>
     </div>
 

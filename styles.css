@@ -98,28 +98,36 @@ h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 400; color: var(
 a { text-decoration: none; color: inherit; }
 
 /* ── Layout ─────────────────────────────────────────────────────────────────── */
+
+/* Full-width single-column layout */
 .app-container {
-  max-width: 700px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 48px 24px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.main-grid { display: flex; flex-direction: column; }
-
-@media (min-width: 1024px) {
-  .app-container {
-    max-width: 1320px;
-    padding: 56px 80px 96px;
-  }
-  .main-grid {
-    display: grid;
-    grid-template-columns: 1.35fr 1fr;
-    column-gap: 72px;
-    align-items: start;
-  }
-  .left-col, .right-col { min-width: 0; }
-  section h2 { font-size: clamp(1.375rem, 2.5vw, 1.625rem); }
+/* Two-up rows for side-by-side sections */
+.two-up-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
 }
+@media (max-width: 700px) {
+  .two-up-row { grid-template-columns: 1fr; }
+  .app-container { padding: 0 16px 96px; }
+}
+
+/* Week strip: full width, taller day cards */
+.week-block { width: 100%; }
+.week-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.week-day-card { min-height: 140px; padding: 10px 10px 8px; border-radius: 10px; }
+.week-day-body { display: flex; flex-direction: column; gap: 3px; overflow: hidden; max-height: 80px; }
+
+/* Legacy col references (no-op now but harmless) */
+.left-col, .right-col { min-width: 0; }
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */
 .app-header {
@@ -782,6 +790,10 @@ section h2 {
 
 .events-list { display: flex; flex-direction: column; }
 
+/* B2 — Event place + time chips */
+.event-place { font-size:0.75rem; color:var(--color-text-muted,#8a8175); display:flex; align-items:center; gap:3px; margin-top:2px; }
+.event-time-chip { font-size:0.72rem; color:var(--accent-deep,#9B4E0B); background:var(--accent-glow,rgba(194,98,14,0.12)); padding:1px 6px; border-radius:8px; display:inline-flex; align-items:center; gap:3px; margin-top:2px; }
+
 /* ── Day Detail Modal ────────────────────────────────────────────────────────── */
 .day-detail-card {
   background-color: var(--bg);
@@ -894,6 +906,20 @@ section h2 {
   transform: translateY(-1px);
 }
 
+/* B3 — Day todo meta fields */
+.day-todo-add-row { flex-direction:column !important; gap:6px; align-items:stretch !important; }
+.day-todo-meta-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.select-input-sm { font-size:0.78rem; padding:4px 8px; border:1px solid var(--border,#e3dccf); border-radius:6px; background:var(--surface,#F0E9DD); color:var(--color-text-muted,#8a8175); font-family:var(--font-body,'Instrument Sans',sans-serif); min-width:0; }
+.ts-toggle { display:inline-flex; align-items:center; gap:4px; font-size:0.75rem; padding:4px 9px; border:1px solid var(--border,#e3dccf); border-radius:8px; background:none; color:var(--color-text-muted,#8a8175); cursor:pointer; transition:background 140ms,color 140ms,border-color 140ms; font-family:var(--font-body,'Instrument Sans',sans-serif); white-space:nowrap; }
+.ts-toggle.ts-on { background:var(--accent-glow,rgba(194,98,14,0.12)); color:var(--accent-deep,#9B4E0B); border-color:var(--accent,#C2620E); }
+.dt-proj-chip { font-size:0.68rem; font-weight:500; padding:1px 6px; border-radius:8px; display:inline-flex; align-items:center; }
+.dt-ts-chip { display:inline-flex; align-items:center; color:var(--accent,#C2620E); }
+.dt-av { width:16px; height:16px; border-radius:50%; font-size:0.58rem; font-weight:700; display:grid; place-items:center; color:#fff; flex:none; }
+.dt-av.mohammed { background:var(--user-mohammed,#1F5C3A); }
+.dt-av.eyad     { background:var(--user-eyad,#7C3AED); }
+.dt-av.yusuf    { background:var(--user-yusuf,#38BDF8); color:var(--user-yusuf-on,#0369A1); }
+.week-ts-dot { width:5px; height:5px; border-radius:50%; background:var(--accent,#C2620E); flex:none; }
+
 /* ── Inline time editing ─────────────────────────────────────────────────────── */
 .time-block-value.time-editable { cursor: pointer; }
 .time-block-value.time-editable:hover {
@@ -977,7 +1003,9 @@ section h2 {
 
 input[type="text"],
 input[type="password"],
-input[type="date"] {
+input[type="date"],
+input[type="time"],
+.text-input {
   width: 100%;
   padding: 13px 16px;
   border: 1px solid var(--border);
@@ -996,8 +1024,13 @@ input:focus {
 input::placeholder { color: var(--text-faint); }
 
 .modal-card input[type="text"],
-.modal-card input[type="date"] {
+.modal-card input[type="date"],
+.modal-card input[type="time"],
+.modal-card .text-input {
   margin-top: 14px;
+}
+.modal-card > div > input[type="time"] {
+  margin-top: 0;
 }
 
 .select-input {
@@ -1713,13 +1746,6 @@ input::placeholder { color: var(--text-faint); }
 
 /* ── Mobile breakpoint 767px ────────────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .main-grid {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
-  .right-col, .left-col {
-    padding: 0 16px;
-  }
   .your-week-section {
     margin: 12px 0 16px;
   }
@@ -2082,6 +2108,49 @@ input::placeholder { color: var(--text-faint); }
   .pulse-item.animate { animation: none; opacity: 1; }
   .pulse-dot { animation: none; }
 }
+
+/* B4 — Friday Planning Box */
+.friday-plan-section { background:var(--surface,#F0E9DD); border:1px solid var(--border,#e3dccf); border-radius:16px; padding:20px 22px; display:flex; flex-direction:column; gap:10px; }
+.friday-plan-head { display:flex; align-items:center; gap:8px; }
+.friday-plan-head h2 { font-family:var(--font-display,'Cormorant Garamond',serif); font-size:1.35rem; font-style:italic; font-weight:400; }
+.friday-plan-date { font-size:0.82rem; color:var(--color-text-muted,#8a8175); }
+.friday-plan-idea-wrap { display:flex; align-items:flex-start; gap:8px; flex:1; }
+.friday-plan-idea-text { flex:1; font-size:0.9rem; line-height:1.5; min-height:44px; border-radius:6px; padding:2px 0; outline:none; cursor:pointer; }
+.friday-plan-idea-text[contenteditable="true"] { border-bottom:1.5px solid var(--accent,#C2620E); cursor:text; padding:2px 4px; background:var(--bg,#FAF7F2); border-radius:4px 4px 0 0; }
+.friday-plan-idea-text.friday-plan-empty { color:var(--color-text-muted,#8a8175); font-style:italic; }
+.friday-plan-edit-btn { background:none; border:none; color:var(--color-text-muted,#8a8175); cursor:pointer; padding:4px; border-radius:6px; transition:color 140ms; flex:none; }
+.friday-plan-edit-btn:hover { color:var(--accent,#C2620E); }
+.friday-plan-actions { margin-top:2px; }
+
+/* B5 — Pulse Intro Overlay */
+#pulseIntroOverlay { position:fixed; inset:0; z-index:999; background:var(--bg,#FAF7F2); display:flex; align-items:center; justify-content:center; padding:40px 24px; }
+.pio-inner { max-width:520px; width:100%; display:flex; flex-direction:column; gap:18px; }
+.pio-header { display:flex; align-items:center; gap:10px; }
+.pio-title { font-family:var(--font-display,'Cormorant Garamond',serif); font-size:2.4rem; font-style:italic; font-weight:300; color:var(--color-text,#1C1917); }
+.pio-insight { font-family:var(--font-display,'Cormorant Garamond',serif); font-size:1.15rem; font-style:italic; color:var(--accent,#C2620E); line-height:1.5; }
+.pio-feed { display:flex; flex-direction:column; gap:16px; margin-top:4px; }
+.pio-item { display:flex; align-items:center; gap:14px; font-size:0.95rem; line-height:1.4; }
+.pio-txt { color:var(--color-text,#1C1917); }
+.pio-dismiss-btn { align-self:flex-end; margin-top:8px; background:var(--accent,#C2620E); color:#fff; border:none; border-radius:8px; padding:10px 26px; font-family:var(--font-body,'Instrument Sans',sans-serif); font-size:0.88rem; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; cursor:pointer; transition:background 140ms; }
+.pio-dismiss-btn:hover { background:var(--accent-deep,#9B4E0B); }
+@media (max-width:600px) {
+  .pio-title { font-size:1.8rem; }
+  .pio-insight { font-size:1rem; }
+  #pulseIntroOverlay { padding:24px 20px; align-items:flex-start; padding-top:60px; }
+}
+
+/* B6 — Project three-dot menu */
+.proj-menu-wrap { position:relative; flex:none; }
+.proj-menu-btn { background:none; border:1px solid var(--border,#e3dccf); color:var(--color-text-muted,#8a8175); border-radius:8px; padding:3px 9px; cursor:pointer; line-height:1; transition:background 140ms,border-color 140ms,color 140ms; display:flex; align-items:center; }
+.proj-menu-btn:hover { background:var(--surface,#F0E9DD); border-color:var(--accent,#C2620E); color:var(--accent,#C2620E); }
+.proj-menu-dots { letter-spacing:1px; font-size:13px; font-weight:700; }
+.proj-dropdown { position:absolute; right:0; top:calc(100% + 6px); background:var(--bg,#FAF7F2); border:1px solid var(--border,#e3dccf); border-radius:10px; padding:4px; min-width:158px; box-shadow:0 8px 24px rgba(0,0,0,0.10); z-index:20; display:none; }
+.proj-dropdown.open { display:block; }
+.proj-dd-item { display:flex; align-items:center; gap:8px; width:100%; background:none; border:none; padding:8px 10px; border-radius:7px; font-family:var(--font-body,'Instrument Sans',sans-serif); font-size:0.85rem; color:var(--color-text,#1C1917); cursor:pointer; text-align:left; transition:background 120ms; }
+.proj-dd-item:hover { background:var(--surface,#F0E9DD); }
+.proj-dd-delete { color:#E11D48 !important; }
+.proj-dd-delete:hover { background:rgba(225,29,72,0.07) !important; }
+.proj-dd-divider { height:1px; background:var(--border,#e3dccf); margin:3px 8px; }
 
 /* ── Inline SVG icon system ─────────────────────────────────────────────────── */
 .ic {
