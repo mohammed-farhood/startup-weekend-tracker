@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let viewUser = null;
 
     let _fbSync = false;
+    let fridayPlan = JSON.parse(localStorage.getItem('fridayPlan') || '{"idea":""}');
 
     const saveEvents   = () => { localStorage.setItem('events',        JSON.stringify(events));   if (!_fbSync) db.ref('data/events').set(events); };
     const saveTasks    = () => { localStorage.setItem('tasks',         JSON.stringify(tasks));    if (!_fbSync) db.ref('data/tasks').set(tasks); };
@@ -116,6 +117,16 @@ document.addEventListener('DOMContentLoaded', () => {
             watch('savedProjects', 'savedProjects', v => { projects = v; }, () => {
                 renderProjects(); renderFridayTimeline(); renderCommandCenter(); renderPulse();
             }, []);
+            // Friday plan sync
+            db.ref('data/fridayPlan').off();
+            db.ref('data/fridayPlan').on('value', snap => {
+                _fbSync = true;
+                try {
+                    fridayPlan = snap.val() || { idea: '' };
+                    localStorage.setItem('fridayPlan', JSON.stringify(fridayPlan));
+                    renderFridayPlan();
+                } finally { _fbSync = false; }
+            });
             // Read-only listeners: written by project page, consumed here for cards + personal dashboard
             db.ref('data/projectTasksByProject').off();
             db.ref('data/projectTasksByProject').on('value', snap => {
@@ -189,6 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ...dayEvts.map(e => ({ type: 'event', text: e.title })),
                 ...dayTds.map(t => ({ type: 'todo',  text: t.text  }))
             ];
+            const hasTsItem = (dayTodos[ds] || []).some(t => t.timeSensitive && !t.completed);
 
             const card = document.createElement('div');
             card.className = 'week-day-card' + (isToday ? ' today' : '') + (isFri ? ' friday' : '');
@@ -197,6 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `<div class="week-mini-item ${item.type}">${esc(item.text)}</div>`
             ).join('');
             if (allItems.length > 8) itemsHtml += `<div class="week-more">+${allItems.length - 8} more</div>`;
+            if (hasTsItem) itemsHtml += `<span class="week-ts-dot"></span>`;
 
             card.innerHTML = `
                 <div class="week-day-header">
@@ -286,7 +299,11 @@ document.addEventListener('DOMContentLoaded', () => {
             item.className = 'event-item';
             item.innerHTML = `
                 <div class="event-date">${mon} ${d}</div>
-                <div class="event-item-info"><h4>${esc(evt.title)}</h4></div>
+                <div class="event-item-info">
+                    <h4>${esc(evt.title)}</h4>
+                    ${evt.place ? `<div class="event-place">${icon('mapPin','sm')} ${esc(evt.place)}</div>` : ''}
+                    ${evt.time ? `<span class="event-time-chip">${icon('timer','sm')} ${time12h(evt.time)}</span>` : ''}
+                </div>
                 <button class="delete-event-btn" data-id="${evt.id}">${icon('trash')}</button>`;
             item.querySelector('.delete-event-btn').addEventListener('click', () => {
                 if (!confirm(`Delete event "${evt.title}"?`)) return;
@@ -302,27 +319,110 @@ document.addEventListener('DOMContentLoaded', () => {
         renderWeekView();
         renderCalendar();
         renderEventsList();
+        renderFridayPlan();
     }
+
+    // ── B4 Friday Planning Box ────────────────────────────────────────────────
+    function renderFridayPlan() {
+        const dateEl = document.getElementById('fridayPlanDate');
+        const textEl = document.getElementById('fridayPlanText');
+        const editBtn = document.getElementById('fridayPlanEditBtn');
+        const createBtn = document.getElementById('fridayCreateEventBtn');
+        if (!dateEl) return;
+
+        // Compute next Friday
+        const now = new Date();
+        const dow = now.getDay(); // 0=Sun, 5=Fri
+        const actualDays = (5 - dow + 7) % 7;
+        const daysUntil = actualDays || 7;
+        const friday = new Date(now);
+        friday.setDate(now.getDate() + daysUntil);
+        const isToday = actualDays === 0;
+        const countdown = isToday ? 'Today!' : `in ${actualDays} day${actualDays === 1 ? '' : 's'}`;
+        const fmtDate = friday.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+        dateEl.textContent = fmtDate + ' — ' + countdown;
+
+        if (textEl) {
+            const idea = fridayPlan.idea || '';
+            textEl.textContent = idea || 'What are we building?';
+            if (idea) textEl.classList.remove('friday-plan-empty');
+            else textEl.classList.add('friday-plan-empty');
+        }
+
+        // Icon content via JS (since we can't use icon() in static HTML)
+        if (editBtn && !editBtn.innerHTML) editBtn.innerHTML = icon('edit', 'sm');
+        if (createBtn && !createBtn.innerHTML) createBtn.innerHTML = icon('spark', 'sm') + ' Create Friday event';
+    }
+
+    document.getElementById('fridayPlanEditBtn')?.addEventListener('click', () => {
+        const textEl = document.getElementById('fridayPlanText');
+        if (!textEl) return;
+        const idea = fridayPlan.idea || '';
+        textEl.textContent = idea || '';
+        textEl.contentEditable = 'true';
+        textEl.classList.remove('friday-plan-empty');
+        textEl.focus();
+        // Place cursor at end
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(textEl);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    });
+
+    document.getElementById('fridayPlanText')?.addEventListener('blur', () => {
+        const textEl = document.getElementById('fridayPlanText');
+        if (!textEl || textEl.contentEditable !== 'true') return;
+        textEl.contentEditable = 'false';
+        const idea = textEl.textContent.trim();
+        fridayPlan.idea = idea;
+        localStorage.setItem('fridayPlan', JSON.stringify(fridayPlan));
+        if (!_fbSync) db.ref('data/fridayPlan').set({ idea, updatedAt: Date.now(), updatedBy: localStorage.getItem('currentUser') || '' });
+        renderFridayPlan();
+    });
+
+    document.getElementById('fridayCreateEventBtn')?.addEventListener('click', () => {
+        document.getElementById('fridaySessionBtn')?.click();
+    });
 
     // ── Add Event Modal ───────────────────────────────────────────────────────
     const eventModal      = document.getElementById('eventModal');
     const eventTitleInput = document.getElementById('eventTitle');
+    const eventPlaceInput = document.getElementById('eventPlace');
+    const eventTimeInput  = document.getElementById('eventTime');
     const eventDateInput  = document.getElementById('eventDate');
 
     document.getElementById('addEventBtn')?.addEventListener('click', () => {
         eventTitleInput.value = ''; eventDateInput.value = '';
+        if (eventPlaceInput) eventPlaceInput.value = '';
+        if (eventTimeInput)  eventTimeInput.value  = '';
         eventModal.style.display = 'flex';
     });
-    document.getElementById('cancelEventBtn')?.addEventListener('click', () => { eventModal.style.display = 'none'; });
+    document.getElementById('cancelEventBtn')?.addEventListener('click', () => {
+        eventModal.style.display = 'none';
+        if (eventPlaceInput) eventPlaceInput.value = '';
+        if (eventTimeInput)  eventTimeInput.value  = '';
+    });
     document.getElementById('saveEventBtn')?.addEventListener('click', saveNewEvent);
     eventDateInput?.addEventListener('keydown', e => { if (e.key === 'Enter') saveNewEvent(); });
+
+    function time12h(t) {
+        if (!t) return '';
+        const [h, m] = t.split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        return h12 + ':' + String(m).padStart(2,'0') + ' ' + ampm;
+    }
 
     function saveNewEvent() {
         const title = eventTitleInput.value.trim();
         const date  = eventDateInput.value;
         if (!title || !date) return;
-        events.push({ id: uid(), title, date });
+        events.push({ id: uid(), title, date, place: (eventPlaceInput?.value.trim() || null), time: (eventTimeInput?.value || null) });
         saveEvents(); renderAll();
+        if (eventPlaceInput) eventPlaceInput.value = '';
+        if (eventTimeInput)  eventTimeInput.value  = '';
         eventModal.style.display = 'none';
         if (dayDetailModal?.style.display === 'flex') renderDayDetail();
     }
@@ -528,6 +628,17 @@ document.addEventListener('DOMContentLoaded', () => {
         dayDetailTitle.textContent = `${dayNames[dt.getDay()]}, ${monthNames[m-1]} ${d}`;
         document.getElementById('dayEventAddRow').style.display = 'none';
         document.getElementById('dayTodoAddRow').style.display  = 'none';
+        // Populate project dropdown
+        const projSel = document.getElementById('dayTodoProject');
+        if (projSel) {
+            projSel.innerHTML = '<option value="">No project</option>';
+            projects.filter(p => p.status === 'active' || !p.status).forEach(p => {
+                const o = document.createElement('option');
+                o.value = p.id;
+                o.textContent = p.name;
+                projSel.appendChild(o);
+            });
+        }
         renderDayDetail();
         dayDetailModal.style.display = 'flex';
     }
@@ -541,7 +652,13 @@ document.addEventListener('DOMContentLoaded', () => {
         todayEvents.forEach(evt => {
             const item = document.createElement('div');
             item.className = 'day-event-item';
-            item.innerHTML = `<span>${esc(evt.title)}</span><button class="task-action-btn" style="color:var(--color-text-muted)">${icon('trash', 'sm')}</button>`;
+            item.innerHTML = `
+                <div style="flex:1;min-width:0;">
+                    <span>${esc(evt.title)}</span>
+                    ${evt.place ? `<div class="event-place">${icon('mapPin','sm')} ${esc(evt.place)}</div>` : ''}
+                    ${evt.time ? `<span class="event-time-chip">${icon('timer','sm')} ${time12h(evt.time)}</span>` : ''}
+                </div>
+                <button class="task-action-btn" style="color:var(--color-text-muted)">${icon('trash', 'sm')}</button>`;
             item.querySelector('button').addEventListener('click', () => {
                 if (!confirm(`Delete event "${evt.title}"?`)) return;
                 events = events.filter(e => e.id !== evt.id);
@@ -557,11 +674,18 @@ document.addEventListener('DOMContentLoaded', () => {
         todos.forEach(todo => {
             const li = document.createElement('li');
             li.className = 'todo-item' + (todo.completed ? ' completed' : '');
+            const proj = todo.projectId ? projects.find(p => p.id == todo.projectId) : null;
+            const assigneeLow = (todo.assignee || '').toLowerCase();
+            const assigneeInit = todo.assignee ? todo.assignee[0] : '';
+            const extraHtml = (proj ? `<span class="dt-proj-chip" style="background:${proj.color}22;color:${proj.color}">${esc(proj.name)}</span>` : '')
+                + (todo.timeSensitive ? `<span class="dt-ts-chip">${icon('timer','sm')}</span>` : '')
+                + (todo.assignee ? `<span class="dt-av dt-av-${assigneeLow}" title="${esc(todo.assignee)}">${assigneeInit}</span>` : '');
             li.innerHTML = `
                 <label class="todo-label">
                     <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
                     <span class="custom-checkbox"></span>
                     <span class="todo-text">${esc(todo.text)}</span>
+                    ${extraHtml}
                 </label>
                 <button class="task-action-btn" style="color:var(--color-text-muted)">${icon('trash', 'sm')}</button>`;
             li.querySelector('.todo-checkbox').addEventListener('change', function () {
@@ -597,19 +721,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     dayEventInput?.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('saveDayEventBtn').click(); });
 
+    let dayTodoTs = false;
+
     const dayTodoAddRow = document.getElementById('dayTodoAddRow');
     const dayTodoInput  = document.getElementById('dayTodoInput');
     document.getElementById('addDayTodoBtn')?.addEventListener('click', () => {
-        dayTodoAddRow.style.display = dayTodoAddRow.style.display === 'flex' ? 'none' : 'flex';
-        if (dayTodoAddRow.style.display === 'flex') dayTodoInput.focus();
+        const isShowing = dayTodoAddRow.style.display !== 'none' && dayTodoAddRow.style.display !== '';
+        dayTodoAddRow.style.display = isShowing ? 'none' : 'flex';
+        if (!isShowing) dayTodoInput.focus();
+    });
+    document.getElementById('dayTodoTsBtn')?.addEventListener('click', function() {
+        dayTodoTs = !dayTodoTs;
+        this.classList.toggle('ts-on', dayTodoTs);
     });
     document.getElementById('saveDayTodoBtn')?.addEventListener('click', () => {
         const text = dayTodoInput.value.trim();
         if (!text) return;
         if (!dayTodos[currentDay]) dayTodos[currentDay] = [];
-        dayTodos[currentDay].push({ id: uid(), text, completed: false });
+        dayTodos[currentDay].push({
+            id: uid(), text, completed: false,
+            projectId: document.getElementById('dayTodoProject')?.value || null,
+            timeSensitive: dayTodoTs,
+            assignee: document.getElementById('dayTodoAssignee')?.value || null
+        });
         saveDayTodos(); renderAll();
         dayTodoInput.value = '';
+        // Reset meta fields
+        dayTodoTs = false;
+        const tsBtn = document.getElementById('dayTodoTsBtn');
+        if (tsBtn) tsBtn.classList.remove('ts-on');
+        if (document.getElementById('dayTodoAssignee')) document.getElementById('dayTodoAssignee').value = '';
+        if (document.getElementById('dayTodoProject'))  document.getElementById('dayTodoProject').value  = '';
         dayTodoAddRow.style.display = 'none';
         renderDayDetail();
     });
@@ -690,6 +832,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 bornHtml = `<span class="proj-born">Born ${BORN_MONTHS[d.getMonth()]} ${d.getDate()}</span>`;
             }
 
+            const menuId = 'pmenu-' + proj.id;
+            const actionsHtml = `
+                <div class="proj-card-actions">
+                    ${ownerHtml}
+                    <span class="proj-status-badge ${isPassive ? 'passive' : 'active'}">${isPassive ? 'Paused' : 'Active'}</span>
+                    <div class="proj-menu-wrap" id="${menuId}-wrap">
+                        <button class="proj-menu-btn" data-pid="${proj.id}" title="More options" aria-label="Project options">
+                            <span class="proj-menu-dots">•••</span>
+                        </button>
+                        <div class="proj-dropdown" id="${menuId}-dd">
+                            <button class="proj-dd-item proj-dd-toggle" data-pid="${proj.id}">
+                                ${icon(isPassive ? 'play' : 'pause', 'sm')} ${isPassive ? 'Resume' : 'Pause'}
+                            </button>
+                            <div class="proj-dd-divider"></div>
+                            <button class="proj-dd-item proj-dd-delete" data-pid="${proj.id}">
+                                ${icon('trash', 'sm')} Delete project
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+
             const card = document.createElement('div');
             card.className = 'project-card' + (isPassive ? ' project-passive' : '');
             card.innerHTML = `
@@ -702,30 +865,38 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="proj-progress-text">${progressText}</span>
                         </div>
                     </div>
-                    <div class="proj-card-actions">
-                        ${ownerHtml}
-                        <span class="proj-status-badge ${isPassive ? 'passive' : 'active'}">${isPassive ? 'Paused' : 'Active'}</span>
-                        <button class="proj-status-toggle" title="${isPassive ? 'Resume project' : 'Pause project'}">${isPassive ? icon('play', 'sm') : icon('pause', 'sm')}</button>
-                        <button class="project-delete-btn" title="Delete project">${icon('trash', 'sm')}</button>
-                    </div>
+                    ${actionsHtml}
                 </div>
                 <div class="progress-bar-container">
                     <div class="progress-bar" style="width:${pct}%;background:${proj.color}"></div>
                 </div>`;
 
-            card.querySelector('.proj-status-toggle').addEventListener('click', e => {
+            // Three-dot menu toggle
+            card.querySelector('.proj-menu-btn').addEventListener('click', e => {
+                e.preventDefault(); e.stopPropagation();
+                const dd = document.getElementById(menuId + '-dd');
+                const isOpen = dd.classList.contains('open');
+                document.querySelectorAll('.proj-dropdown.open').forEach(d => d.classList.remove('open'));
+                if (!isOpen) dd.classList.add('open');
+            });
+
+            // Pause/Resume
+            card.querySelector('.proj-dd-toggle').addEventListener('click', e => {
                 e.preventDefault(); e.stopPropagation();
                 proj.status = isPassive ? 'active' : 'passive';
                 saveProjects(); renderProjects();
             });
-            card.querySelector('.project-delete-btn').addEventListener('click', e => {
+
+            // Delete
+            card.querySelector('.proj-dd-delete').addEventListener('click', e => {
                 e.preventDefault(); e.stopPropagation();
                 if (!confirm(`Delete "${proj.name}"?`)) return;
                 projects = projects.filter(p => p.id !== proj.id);
                 saveProjects(); renderProjects();
             });
+
             card.addEventListener('click', e => {
-                if (e.target.closest('.project-delete-btn') || e.target.closest('.proj-status-toggle')) return;
+                if (e.target.closest('.proj-menu-wrap')) return;
                 sessionStorage.setItem('activeProject', JSON.stringify(proj));
                 window.location.href = 'project.html';
             });
@@ -770,6 +941,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('projectOwnerSelect')?.addEventListener('change', e => {
         selectedProjectOwner = e.target.value;
+    });
+
+    // B6: Close project dropdowns when clicking outside
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.proj-menu-wrap')) {
+            document.querySelectorAll('.proj-dropdown.open').forEach(d => d.classList.remove('open'));
+        }
     });
 
     // ── Friday Session Modal ──────────────────────────────────────────────────
@@ -1020,10 +1198,11 @@ document.addEventListener('DOMContentLoaded', () => {
         acts.sort((a, b) => b.t - a.t);
         const top = acts.slice(0, 6);
 
-        if (insightEl) insightEl.textContent = computeInsight();
+        const insightHtml = computeInsight();
+        if (insightEl) insightEl.innerHTML = insightHtml;
 
         if (top.length === 0) {
-            feedEl.innerHTML = `<div class="pulse-empty">No moves yet — what the team does will show up here.</div>`;
+            feedEl.innerHTML = `<div class=”pulse-empty”>No moves yet — what the team does will show up here.</div>`;
             return;
         }
 
@@ -1031,7 +1210,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ICON = { done: icon('check', 'sm'), time: icon('timer', 'sm'), born: icon('spark', 'sm') };
         feedEl.innerHTML = top.map((a, i) => {
             const cls   = animate ? 'pulse-item animate' : 'pulse-item static';
-            const delay = animate ? ` style="animation-delay:${i * 70}ms"` : '';
+            const delay = animate ? ` style=”animation-delay:${i * 70}ms”` : '';
             let line;
             if (a.kind === 'done')
                 line = `<b>${esc(a.who)}</b> finished “${esc(a.what)}”${a.proj ? ` · ${esc(a.proj)}` : ''}`;
@@ -1039,13 +1218,80 @@ document.addEventListener('DOMContentLoaded', () => {
                 line = `<b>${esc(a.who)}</b> logged ${fmtDur(a.dur)}${a.what ? ` on “${esc(a.what)}”` : ''}${a.proj ? ` · ${esc(a.proj)}` : ''}`;
             else
                 line = `<b>${esc(a.what)}</b> was born${a.who ? `, pitched by ${esc(a.who)}` : ''}`;
-            return `<div class="${cls}"${delay}>`
-                 + `<span class="pulse-ic pulse-ic-${a.kind}">${ICON[a.kind]}</span>`
-                 + `<span class="pulse-txt">${line}</span>`
-                 + `<span class="pulse-when">${relTime(a.t)}</span></div>`;
+            return `<div class=”${cls}”${delay}>`
+                 + `<span class=”pulse-ic pulse-ic-${a.kind}”>${ICON[a.kind]}</span>`
+                 + `<span class=”pulse-txt”>${line}</span>`
+                 + `<span class=”pulse-when”>${relTime(a.t)}</span></div>`;
         }).join('');
         if (animate) _pulseSeen = true;
+
+        // B5: show daily intro overlay if not seen today (only on first render, when animate was true)
+        const todayStr2 = new Date().toISOString().slice(0, 10);
+        const lastSeen = localStorage.getItem('pulseLastSeen');
+        if (animate && lastSeen !== todayStr2 && top.length > 0) {
+            const introItems = top.map(a => ({
+                kind: a.kind || 'done',
+                iconHtml: ICON[a.kind] || '',
+                text: (() => {
+                    if (a.kind === 'done') return `<b>${esc(a.who)}</b> finished “${esc(a.what)}”${a.proj ? ` · ${esc(a.proj)}` : ''}`;
+                    if (a.kind === 'time') return `<b>${esc(a.who)}</b> logged ${fmtDur(a.dur)}${a.what ? ` on “${esc(a.what)}”` : ''}${a.proj ? ` · ${esc(a.proj)}` : ''}`;
+                    return `<b>${esc(a.what)}</b> was born${a.who ? `, pitched by ${esc(a.who)}` : ''}`;
+                })()
+            }));
+            showPulseIntro(introItems, insightHtml);
+        }
     }
+
+    // B5: Pulse Intro Overlay functions
+    function showPulseIntro(topItems, insightHtml) {
+        const overlay = document.getElementById('pulseIntroOverlay');
+        const feed = document.getElementById('pioFeed');
+        const insightEl = document.getElementById('pioInsight');
+        const dismissBtn = document.getElementById('pioDismissBtn');
+        if (!overlay || !feed) return;
+
+        insightEl.innerHTML = insightHtml || '';
+        feed.innerHTML = '';
+        overlay.style.display = 'flex';
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 300ms';
+        setTimeout(() => { overlay.style.opacity = '1'; }, 20);
+
+        topItems.forEach((a, i) => {
+            const el = document.createElement('div');
+            el.className = 'pio-item';
+            el.style.cssText = 'opacity:0;transform:translateY(18px);';
+            el.innerHTML = `<span class=”pulse-ic pulse-ic-${a.kind}”>${a.iconHtml || ''}</span><span class=”pio-txt”>${a.text}</span>`;
+            feed.appendChild(el);
+            setTimeout(() => {
+                el.style.transition = 'opacity 380ms var(--ease-out-expo,cubic-bezier(0.16,1,0.3,1)), transform 380ms var(--ease-out-expo,cubic-bezier(0.16,1,0.3,1))';
+                el.style.opacity = '1';
+                el.style.transform = 'translateY(0)';
+            }, 320 + i * 480);
+        });
+
+        const showDismiss = 320 + topItems.length * 480 + 420;
+        setTimeout(() => {
+            dismissBtn.style.transition = 'opacity 320ms';
+            dismissBtn.style.opacity = '1';
+            dismissBtn.style.pointerEvents = '';
+        }, showDismiss);
+    }
+
+    function dismissPulseIntro() {
+        const overlay = document.getElementById('pulseIntroOverlay');
+        if (!overlay) return;
+        overlay.style.transition = 'opacity 360ms';
+        overlay.style.opacity = '0';
+        setTimeout(() => { overlay.style.display = 'none'; overlay.style.opacity = ''; }, 380);
+        localStorage.setItem('pulseLastSeen', new Date().toISOString().slice(0, 10));
+        _pulseSeen = true;
+    }
+
+    document.getElementById('pioDismissBtn')?.addEventListener('click', dismissPulseIntro);
+    document.getElementById('pulseIntroOverlay')?.addEventListener('click', e => {
+        if (!e.target.closest('#pioInner')) dismissPulseIntro();
+    });
 
     function renderCommandCenter() {
         const el = document.getElementById('commandCenter');
