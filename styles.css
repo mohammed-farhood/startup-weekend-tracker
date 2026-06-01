@@ -23,6 +23,17 @@
   --success:              #166534;
   --success-tint:         rgba(22, 101, 52, 0.10);
 
+  /* Per-person brand colours — Mohammed's green is provisional pending a reference image. */
+  --user-mohammed:        #1F5C3A;
+  --user-mohammed-tint:   #E3EFE7;
+  --user-mohammed-on:     #15402A;
+  --user-eyad:            #7C3AED;
+  --user-eyad-tint:       #EDE6FB;
+  --user-eyad-on:         #5B21B6;
+  --user-yusuf:           #38BDF8;
+  --user-yusuf-tint:      #E3F4FD;
+  --user-yusuf-on:        #0369A1;
+
   /* Legacy aliases — preserves JS inline-style references */
   --color-background:       var(--bg);
   --color-surface:          var(--surface);
@@ -163,18 +174,16 @@ a { text-decoration: none; color: inherit; }
   transition: box-shadow 160ms var(--ease-out);
 }
 .avatar.mohammed {
-  background-color: var(--accent-tint);
-  color: var(--accent-deep);
+  background-color: var(--user-mohammed);
+  color: #fff;
 }
 .avatar.eyad {
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
+  background-color: var(--user-eyad);
+  color: #fff;
 }
 .avatar.yusuf {
-  background-color: #E0F2FE;
-  border: 1px solid #7DD3FC;
-  color: #0369A1;
+  background-color: var(--user-yusuf);
+  color: var(--user-yusuf-on);
 }
 .avatar.active-user {
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--accent);
@@ -488,16 +497,16 @@ section h2 {
   white-space: nowrap;
 }
 .tag-mohammed {
-  background-color: var(--accent-tint);
-  color: var(--accent-deep);
+  background-color: var(--user-mohammed-tint);
+  color: var(--user-mohammed-on);
 }
 .tag-eyad {
-  background-color: var(--border-subtle);
-  color: var(--text-muted);
+  background-color: var(--user-eyad-tint);
+  color: var(--user-eyad-on);
 }
 .tag-yusuf {
-  background-color: #E0F2FE;
-  color: #0369A1;
+  background-color: var(--user-yusuf-tint);
+  color: var(--user-yusuf-on);
 }
 
 /* Task action buttons */
@@ -1532,9 +1541,9 @@ input::placeholder { color: var(--text-faint); }
   color: #fff;
   flex-shrink: 0;
 }
-.proj-owner-badge.mohammed { background: #C2620E; }
-.proj-owner-badge.eyad     { background: #7C3AED; }
-.proj-owner-badge.yusuf    { background: #059669; }
+.proj-owner-badge.mohammed { background: var(--user-mohammed); }
+.proj-owner-badge.eyad     { background: var(--user-eyad); }
+.proj-owner-badge.yusuf    { background: var(--user-yusuf); color: var(--user-yusuf-on); }
 
 .proj-status-badge {
   font-family: var(--font-body);
@@ -1687,9 +1696,9 @@ input::placeholder { color: var(--text-faint); }
   color: #fff;
   flex-shrink: 0;
 }
-.team-av.mohammed { background: #C2620E; }
-.team-av.eyad     { background: #7C3AED; }
-.team-av.yusuf    { background: #059669; }
+.team-av.mohammed { background: var(--user-mohammed); }
+.team-av.eyad     { background: var(--user-eyad); }
+.team-av.yusuf    { background: var(--user-yusuf); color: var(--user-yusuf-on); }
 .team-name  { color: var(--text); font-weight: 500; min-width: 60px; }
 .team-cr    { color: var(--text); font-weight: 600; min-width: 36px; }
 .team-lbl   { color: var(--text-faint); margin-right: 8px; }
@@ -2073,3 +2082,16 @@ input::placeholder { color: var(--text-faint); }
   .pulse-item.animate { animation: none; opacity: 1; }
   .pulse-dot { animation: none; }
 }
+
+/* ── Inline SVG icon system ─────────────────────────────────────────────────── */
+.ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.ic svg { width: 16px; height: 16px; display: block; }
+.ic.sm svg { width: 14px; height: 14px; }
+.ic.lg svg { width: 18px; height: 18px; }

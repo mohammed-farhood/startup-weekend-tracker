@@ -9,6 +9,32 @@ firebase.initializeApp({
 });
 const db = firebase.database();
 
+// ── Inline SVG icon system (Lucide/Feather aesthetic, stroke style) ───────────
+const ICONS = {
+    close:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    trash:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
+    edit:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+    notes:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+    timer:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 14.5 15.5"/><path d="M5 3l4 2M19 3l-4 2M12 1v2"/></svg>',
+    play:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+    pause:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
+    lock:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+    check:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>',
+    chevronLeft:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="15 18 9 12 15 6"/></svg>',
+    chevronRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="9 18 15 12 9 6"/></svg>',
+    chevronDown:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="6 9 12 15 18 9"/></svg>',
+    plus:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    spark:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+    grip:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="9" cy="6" r="1" fill="currentColor"/><circle cx="15" cy="6" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="18" r="1" fill="currentColor"/><circle cx="15" cy="18" r="1" fill="currentColor"/></svg>',
+    user:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    calendar:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    mapPin:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+    users:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+};
+function icon(name, cls) {
+    return '<span class="ic' + (cls ? ' ' + cls : '') + '">' + (ICONS[name] || '') + '</span>';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 
     // ── Constants & element refs ──────────────────────────────────────────────
@@ -31,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let projects = JSON.parse(localStorage.getItem('savedProjects')) || [];
     let projectTasksByProject = {};
     let projectTimeByProject  = {};
+    let projectRoadmapData    = {};
     let viewUser = null;
 
     let _fbSync = false;
@@ -103,6 +130,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 projectTimeByProject = snap.val() || {};
                 renderYourWeek();
                 renderPulse();
+            });
+            db.ref('data/projectRoadmapByProject').off();
+            db.ref('data/projectRoadmapByProject').on('value', snap => {
+                _fbSync = true;
+                try {
+                    projectRoadmapData = snap.val() || {};
+                    renderProjects();
+                } finally {
+                    _fbSync = false;
+                }
             });
         }
     }
@@ -250,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
             item.innerHTML = `
                 <div class="event-date">${mon} ${d}</div>
                 <div class="event-item-info"><h4>${esc(evt.title)}</h4></div>
-                <button class="delete-event-btn" data-id="${evt.id}">✖</button>`;
+                <button class="delete-event-btn" data-id="${evt.id}">${icon('trash')}</button>`;
             item.querySelector('.delete-event-btn').addEventListener('click', () => {
                 if (!confirm(`Delete event "${evt.title}"?`)) return;
                 events = events.filter(e => e.id !== evt.id);
@@ -319,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
             li.innerHTML = `
                 <div class="todo-main">
                     <div class="todo-left">
-                        <button class="subtask-toggle" title="Subtasks">▶</button>
+                        <button class="subtask-toggle" title="Subtasks">${icon('chevronRight', 'sm')}</button>
                         <label class="todo-label">
                             <input type="checkbox" class="todo-checkbox" ${task.completed ? 'checked' : ''}>
                             <span class="custom-checkbox"></span>
@@ -330,8 +367,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="todo-right">
                         ${tagHtml}
                         <span class="assignee ${assigneeClass}">${esc(task.assignee)}</span>
-                        <button class="task-action-btn task-edit-btn" title="Edit">✎</button>
-                        <button class="task-action-btn task-delete-btn" title="Delete">✖</button>
+                        <button class="task-action-btn task-edit-btn" title="Edit">${icon('edit', 'sm')}</button>
+                        <button class="task-action-btn task-delete-btn" title="Delete">${icon('trash', 'sm')}</button>
                     </div>
                 </div>
                 <div class="subtasks-container" style="display:none;">
@@ -388,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="custom-checkbox"></span>
                     <span class="todo-text">${esc(sub.text)}</span>
                 </label>
-                <button class="task-action-btn" title="Delete">✖</button>`;
+                <button class="task-action-btn" title="Delete">${icon('trash', 'sm')}</button>`;
             sli.querySelector('.todo-checkbox').addEventListener('change', function () {
                 sub.completed = this.checked;
                 sli.classList.toggle('completed', this.checked);
@@ -504,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
         todayEvents.forEach(evt => {
             const item = document.createElement('div');
             item.className = 'day-event-item';
-            item.innerHTML = `<span>${esc(evt.title)}</span><button class="task-action-btn" style="color:var(--color-text-muted)">✖</button>`;
+            item.innerHTML = `<span>${esc(evt.title)}</span><button class="task-action-btn" style="color:var(--color-text-muted)">${icon('trash', 'sm')}</button>`;
             item.querySelector('button').addEventListener('click', () => {
                 if (!confirm(`Delete event "${evt.title}"?`)) return;
                 events = events.filter(e => e.id !== evt.id);
@@ -526,7 +563,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="custom-checkbox"></span>
                     <span class="todo-text">${esc(todo.text)}</span>
                 </label>
-                <button class="task-action-btn" style="color:var(--color-text-muted)">✖</button>`;
+                <button class="task-action-btn" style="color:var(--color-text-muted)">${icon('trash', 'sm')}</button>`;
             li.querySelector('.todo-checkbox').addEventListener('change', function () {
                 todo.completed = this.checked;
                 li.classList.toggle('completed', this.checked);
@@ -618,14 +655,25 @@ document.addEventListener('DOMContentLoaded', () => {
         [...active, ...passive].forEach(proj => {
             const isPassive = (proj.status || 'active') === 'passive';
 
-            // Compute real progress from Agent A's data
-            const rawTasks = projectTasksByProject[String(proj.id)];
-            const projTasks = Array.isArray(rawTasks) ? rawTasks
-                : (rawTasks ? Object.values(rawTasks) : []);
-            const total = projTasks.length;
-            const done  = projTasks.filter(t => t.completed).length;
-            const pct   = total ? Math.round((done / total) * 100) : 0;
-            const progressText = total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`;
+            // Compute progress: roadmap-based when steps exist, else task-based
+            const roadmapRaw = projectRoadmapData[String(proj.id)];
+            const rmTiers = (roadmapRaw && Array.isArray(roadmapRaw.tiers)) ? roadmapRaw.tiers : [];
+            const rmSteps = rmTiers.reduce((acc, t) => acc.concat(t.steps || []), []);
+            let total, done, pct, progressText;
+            if (rmSteps.length > 0) {
+                total = rmSteps.length;
+                done  = rmSteps.filter(s => s.done).length;
+                pct   = Math.round(done / total * 100);
+                progressText = `${done} of ${total} steps done`;
+            } else {
+                const rawTasks = projectTasksByProject[String(proj.id)];
+                const projTasks = Array.isArray(rawTasks) ? rawTasks
+                    : (rawTasks ? Object.values(rawTasks) : []);
+                total = projTasks.length;
+                done  = projTasks.filter(t => t.completed).length;
+                pct   = total ? Math.round(done / total * 100) : 0;
+                progressText = total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`;
+            }
 
             // Owner badge
             const ownerClass = proj.owner === 'Mohammed' ? 'mohammed'
@@ -657,8 +705,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="proj-card-actions">
                         ${ownerHtml}
                         <span class="proj-status-badge ${isPassive ? 'passive' : 'active'}">${isPassive ? 'Paused' : 'Active'}</span>
-                        <button class="proj-status-toggle" title="${isPassive ? 'Resume project' : 'Pause project'}">${isPassive ? '▶' : '⏸'}</button>
-                        <button class="project-delete-btn" title="Delete project">✕</button>
+                        <button class="proj-status-toggle" title="${isPassive ? 'Resume project' : 'Pause project'}">${isPassive ? icon('play', 'sm') : icon('pause', 'sm')}</button>
+                        <button class="project-delete-btn" title="Delete project">${icon('trash', 'sm')}</button>
                     </div>
                 </div>
                 <div class="progress-bar-container">
@@ -841,7 +889,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const s = getStatsFor(user);
         const isEmpty = s.assigned === 0 && s.weekSecs === 0 && s.weeklyCompleted === 0;
         const cr = s.assigned > 0 ? Math.round((s.completed / s.assigned) * 100) : null;
-        const overdueLabel = s.overdue === 0 ? 'nothing overdue ✓'
+        const overdueLabel = s.overdue === 0 ? 'nothing overdue ' + icon('check', 'sm')
             : s.overdue === 1 ? '1 thing waiting on you'
             : s.overdue + ' things waiting on you';
 
@@ -946,7 +994,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (top && top[1] / total >= 0.9 && Object.keys(users).length >= 1)
                     return `${NAME[top[0]] || top[0]} has carried ${projName[pid]} solo this week — worth a hand?`;
             }
-            if (teamSecs >= 3600) return `The team logged ${fmtDur(teamSecs)} this week 🔥`;
+            if (teamSecs >= 3600) return `The team logged ${fmtDur(teamSecs)} this week ` + icon('spark', 'sm');
             if (teamSecs > 0)     return `${fmtDur(teamSecs)} logged this week — momentum building.`;
             return `A fresh week. The first log sets the pace.`;
         }
@@ -980,7 +1028,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const animate = !_pulseSeen;
-        const ICON = { done: '✓', time: '⏱', born: '⚡' };
+        const ICON = { done: icon('check', 'sm'), time: icon('timer', 'sm'), born: icon('spark', 'sm') };
         feedEl.innerHTML = top.map((a, i) => {
             const cls   = animate ? 'pulse-item animate' : 'pulse-item static';
             const delay = animate ? ` style="animation-delay:${i * 70}ms"` : '';
@@ -1232,15 +1280,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         function updateProjectProgress() {
-            const total = projectTasks.length;
-            const done  = projectTasks.filter(t => t.completed).length;
-            const pct   = total ? Math.round((done / total) * 100) : 0;
+            const { total, done } = roadmapStats();
+            const pct = total ? Math.round(done / total * 100) : 0;
             const bar      = document.querySelector('.progress-bar');
             const pctLabel = document.querySelector('.progress-labels span:last-child');
             const meta     = document.querySelector('.project-meta');
             if (bar)      bar.style.width = pct + '%';
             if (pctLabel) pctLabel.textContent = pct + '%';
-            if (meta)     meta.textContent = `${done} of ${total} tasks complete`;
+            if (meta)     meta.textContent = total === 0
+                ? 'No roadmap steps yet'
+                : `${done} of ${total} roadmap steps complete`;
         }
 
         function renderProjectTasks() {
@@ -1265,7 +1314,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (task.blockedBy) {
                     const blocker = projectTasks.find(b => b.id == task.blockedBy);
                     if (blocker && !blocker.completed) {
-                        blockedChip = `<span class="blocked-chip">🔒 blocked by ${escH(blocker.text)}</span>`;
+                        blockedChip = `<span class="blocked-chip">${icon('lock', 'sm')} blocked by ${escH(blocker.text)}</span>`;
                     }
                 }
                 let dueDateChip = '';
@@ -1294,10 +1343,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${dueDateChip}
                             <span class="assignee ${assigneeClass}">${escH(assigneeLabel)}</span>
                             <span class="task-time-chip" id="task-time-${task.id}" style="display:none;"></span>
-                            <button class="task-action-btn task-timer-btn" data-task-timer="${task.id}" title="Track time on this task">⏱</button>
-                            <button class="notes-toggle-btn task-action-btn" title="Notes">${task.notes ? '📝' : '✎'} Notes</button>
+                            <button class="task-action-btn task-timer-btn" data-task-timer="${task.id}" title="Track time on this task">${icon('timer', 'sm')}</button>
+                            <button class="notes-toggle-btn task-action-btn" title="Notes">${task.notes ? icon('notes', 'sm') : icon('edit', 'sm')} Notes</button>
                             <button class="task-action-btn task-edit-btn" title="Edit">Edit</button>
-                            <button class="task-action-btn task-delete-btn" title="Delete">✖</button>
+                            <button class="task-action-btn task-delete-btn" title="Delete">${icon('trash', 'sm')}</button>
                         </div>
                     </div>
                     <div class="notes-container" style="display:none;">
@@ -1328,7 +1377,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.querySelector('.notes-textarea').addEventListener('input', function () {
                     const liveTask = projectTasks.find(x => x.id == task.id) || task;
                     liveTask.notes = this.value;
-                    li.querySelector('.notes-toggle-btn').innerHTML = this.value.trim() ? '📝 Notes' : '✎ Notes';
+                    li.querySelector('.notes-toggle-btn').innerHTML = (this.value.trim() ? icon('notes', 'sm') : icon('edit', 'sm')) + ' Notes';
                     saveProjectTasks();
                 });
             });
@@ -1784,85 +1833,216 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         function roadmapStats() {
-            let total = 0, done = 0, currentId = null;
+            let total = 0, done = 0;
             projectRoadmap.tiers.forEach(t => (t.steps || []).forEach(s => {
                 total++;
                 if (s.done) done++;
-                else if (!currentId) currentId = s.id;
             }));
-            return { total, done, currentId };
+            return { total, done };
         }
 
         function renderRoadmap() {
             const wrap = document.getElementById('roadmap');
             if (!wrap) return;
-            const { total, done, currentId } = roadmapStats();
+            const { total, done } = roadmapStats();
             const metaEl = document.getElementById('roadmapMeta');
             if (metaEl) metaEl.textContent = total ? `${done} / ${total} steps` : '';
 
+            let html = '';
             if (projectRoadmap.tiers.length === 0) {
-                wrap.innerHTML = `<div class="rm-empty">No roadmap yet. Add a <b>tier</b> — a major milestone on the way to the full vision — then break it into <b>steps</b>. You'll see exactly where you are on the path.</div>`;
-                return;
-            }
-            wrap.innerHTML = projectRoadmap.tiers.map((tier, ti) => {
-                const steps = tier.steps || [];
-                const stepsHtml = steps.length ? steps.map(s => {
-                    const state = s.done ? 'done' : (s.id === currentId ? 'current' : 'future');
-                    return `<div class="rm-step ${state}" data-tier="${tier.id}" data-step="${s.id}">
-                        <span class="rm-node"></span>
-                        <span class="rm-step-title">${escH(s.title)}</span>
-                        ${s.id === currentId ? '<span class="rm-here">you are here</span>' : ''}
-                        <button class="rm-del rm-del-step" data-tier="${tier.id}" data-step="${s.id}" title="Delete step">✕</button>
+                html += `<div class="rm-empty">No roadmap yet. Add a <b>tier</b> — a major milestone on the way to the full vision — then break it into <b>steps</b>. You'll see exactly where you are on the path.</div>`;
+            } else {
+                projectRoadmap.tiers.forEach((tier, ti) => {
+                    const steps = tier.steps || [];
+                    const tierDone    = steps.length > 0 && steps.every(s => s.done);
+                    const tierStarted = !!tier.started;
+                    const tierActive  = tierStarted && !tierDone;
+                    const tierLocked  = !tierStarted && !tierDone;
+                    // per-active-tier "you are here" step
+                    const currentStepId = tierActive
+                        ? (steps.find(s => !s.done) || {}).id || null
+                        : null;
+                    let tierClass = 'rm-tier';
+                    if (tierDone)   tierClass += ' rm-tier-done';
+                    if (tierActive) tierClass += ' rm-tier-active';
+                    if (tierLocked) tierClass += ' rm-tier-locked';
+
+                    let startBtn = '';
+                    if (tierLocked) {
+                        startBtn = `<button class="rm-start-btn" data-tier="${tier.id}" title="Start this tier">${icon('play','sm')} Start</button>`;
+                    }
+
+                    const stepsHtml = steps.map(s => {
+                        let state;
+                        if (s.done) {
+                            state = 'done';
+                        } else if (tierLocked) {
+                            state = 'future';
+                        } else if (s.id === currentStepId) {
+                            state = 'current';
+                        } else {
+                            state = 'future';
+                        }
+                        const hereTag = (state === 'current') ? '<span class="rm-here">you are here</span>' : '';
+                        return `<div class="rm-step ${state}" data-tier="${tier.id}" data-step="${s.id}">
+                            <span class="rm-node" data-tier="${tier.id}" data-step="${s.id}"></span>
+                            <span class="rm-step-title" data-tier="${tier.id}" data-step="${s.id}">${escH(s.title)}</span>
+                            ${hereTag}
+                            <button class="rm-del rm-del-step" data-tier="${tier.id}" data-step="${s.id}" title="Delete step">${icon('close', 'sm')}</button>
+                        </div>`;
+                    }).join('');
+                    const ghostStep = `<div class="rm-add-ghost rm-add-ghost-step" data-tier="${tier.id}">${icon('plus','sm')} add step</div>`;
+
+                    html += `<div class="${tierClass}" data-tier-id="${tier.id}">
+                        <div class="rm-tier-head">
+                            <span class="rm-tier-badge">${tierDone ? icon('check', 'sm') : (ti + 1)}</span>
+                            <span class="rm-tier-title" data-tier="${tier.id}">${escH(tier.title)}</span>
+                            ${startBtn}
+                            <button class="rm-del rm-del-tier" data-tier="${tier.id}" title="Delete tier">${icon('trash', 'sm')}</button>
+                        </div>
+                        <div class="rm-steps">${stepsHtml}${ghostStep}</div>
                     </div>`;
-                }).join('') : `<div class="rm-step-empty">No steps yet — add the first one.</div>`;
-                const tierDone = steps.length && steps.every(s => s.done);
-                return `<div class="rm-tier ${tierDone ? 'rm-tier-done' : ''}">
-                    <div class="rm-tier-head">
-                        <span class="rm-tier-badge">${tierDone ? '✓' : (ti + 1)}</span>
-                        <span class="rm-tier-title">${escH(tier.title)}</span>
-                        <button class="rm-add-step" data-tier="${tier.id}" title="Add a step to this tier">+ step</button>
-                        <button class="rm-del rm-del-tier" data-tier="${tier.id}" title="Delete tier">✕</button>
-                    </div>
-                    <div class="rm-steps">${stepsHtml}</div>
-                </div>`;
-            }).join('');
+                });
+            }
+            // Ghost "add tier" card at bottom
+            html += `<div class="rm-add-ghost rm-add-ghost-tier">${icon('plus','sm')} add tier</div>`;
+            wrap.innerHTML = html;
+            updateProjectProgress();
+        }
+
+        // Helper: swap an element to an inline input, call onCommit(value) on Enter/blur-save, cancel on Esc/blur-empty
+        function rmInlineEdit(container, inputClass, placeholder, initialValue, onCommit) {
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.className = inputClass;
+            inp.placeholder = placeholder;
+            if (initialValue) inp.value = initialValue;
+            container.innerHTML = '';
+            container.appendChild(inp);
+            inp.focus();
+            if (initialValue) { inp.select(); }
+            let committed = false;
+            const commit = () => {
+                if (committed) return;
+                committed = true;
+                const v = inp.value.trim();
+                if (v) onCommit(v);
+                else renderRoadmap();
+            };
+            const cancel = () => {
+                if (committed) return;
+                committed = true;
+                renderRoadmap();
+            };
+            inp.addEventListener('keydown', ev => {
+                if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+                else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+            });
+            inp.addEventListener('blur', () => {
+                if (!committed) {
+                    const v = inp.value.trim();
+                    if (v) commit(); else cancel();
+                }
+            });
         }
 
         document.getElementById('addTierBtn')?.addEventListener('click', () => {
-            const title = prompt('New tier — a major milestone (e.g. "MVP shipped", "First 10 users"):');
-            if (!title || !title.trim()) return;
-            projectRoadmap.tiers.push({ id: uid(), title: title.trim(), steps: [] });
-            saveRoadmap(); renderRoadmap();
+            const wrap = document.getElementById('roadmap');
+            if (!wrap) return;
+            const ghost = wrap.querySelector('.rm-add-ghost-tier');
+            if (ghost) ghost.click();
         });
 
         document.getElementById('roadmap')?.addEventListener('click', e => {
-            const addStep = e.target.closest('.rm-add-step');
-            const delTier = e.target.closest('.rm-del-tier');
-            const delStep = e.target.closest('.rm-del-step');
-            const stepRow = e.target.closest('.rm-step');
-            if (addStep) {
-                const tier = projectRoadmap.tiers.find(t => t.id === addStep.dataset.tier);
+            // Inline rename: tier title
+            const tierTitleEl = e.target.closest('.rm-tier-title[data-tier]');
+            if (tierTitleEl && !tierTitleEl.querySelector('input')) {
+                e.stopPropagation();
+                const tierId = tierTitleEl.dataset.tier;
+                const tier = projectRoadmap.tiers.find(t => t.id === tierId);
                 if (!tier) return;
-                const title = prompt('New step in "' + tier.title + '":');
-                if (!title || !title.trim()) return;
-                (tier.steps = tier.steps || []).push({ id: uid(), title: title.trim(), done: false });
-                saveRoadmap(); renderRoadmap();
-            } else if (delTier) {
+                rmInlineEdit(tierTitleEl, 'rm-tier-title-input', 'Tier name…', tier.title, v => {
+                    tier.title = v; saveRoadmap(); renderRoadmap();
+                });
+                return;
+            }
+
+            // Inline rename: step title
+            const stepTitleEl = e.target.closest('.rm-step-title[data-tier]');
+            if (stepTitleEl && !stepTitleEl.querySelector('input')) {
+                e.stopPropagation();
+                const tierId = stepTitleEl.dataset.tier;
+                const stepId = stepTitleEl.dataset.step;
+                const tier = projectRoadmap.tiers.find(t => t.id === tierId);
+                const step = tier && (tier.steps || []).find(s => s.id === stepId);
+                if (!step) return;
+                rmInlineEdit(stepTitleEl, 'rm-inline-input', 'Step name…', step.title, v => {
+                    step.title = v; saveRoadmap(); renderRoadmap();
+                });
+                return;
+            }
+
+            // Toggle done: click on the node dot only
+            const nodeEl = e.target.closest('.rm-node[data-tier]');
+            if (nodeEl) {
+                e.stopPropagation();
+                const tier = projectRoadmap.tiers.find(t => t.id === nodeEl.dataset.tier);
+                const step = tier && (tier.steps || []).find(s => s.id === nodeEl.dataset.step);
+                if (step) { step.done = !step.done; saveRoadmap(); renderRoadmap(); }
+                return;
+            }
+
+            // Delete tier
+            const delTier = e.target.closest('.rm-del-tier');
+            if (delTier) {
                 const tier = projectRoadmap.tiers.find(t => t.id === delTier.dataset.tier);
                 if (tier && confirm(`Delete tier "${tier.title}" and its steps?`)) {
                     projectRoadmap.tiers = projectRoadmap.tiers.filter(t => t.id !== delTier.dataset.tier);
                     saveRoadmap(); renderRoadmap();
                 }
-            } else if (delStep) {
+                return;
+            }
+
+            // Delete step
+            const delStep = e.target.closest('.rm-del-step');
+            if (delStep) {
                 const tier = projectRoadmap.tiers.find(t => t.id === delStep.dataset.tier);
                 if (tier) {
                     tier.steps = (tier.steps || []).filter(s => s.id !== delStep.dataset.step);
                     saveRoadmap(); renderRoadmap();
                 }
-            } else if (stepRow) {
-                const tier = projectRoadmap.tiers.find(t => t.id === stepRow.dataset.tier);
-                const step = tier && (tier.steps || []).find(s => s.id === stepRow.dataset.step);
-                if (step) { step.done = !step.done; saveRoadmap(); renderRoadmap(); }
+                return;
+            }
+
+            // Start tier
+            const startBtn = e.target.closest('.rm-start-btn');
+            if (startBtn) {
+                const tier = projectRoadmap.tiers.find(t => t.id === startBtn.dataset.tier);
+                if (tier) { tier.started = true; saveRoadmap(); renderRoadmap(); }
+                return;
+            }
+
+            // Ghost "add step" row
+            const ghostStep = e.target.closest('.rm-add-ghost-step');
+            if (ghostStep && !ghostStep.querySelector('input')) {
+                const tierId = ghostStep.dataset.tier;
+                const tier = projectRoadmap.tiers.find(t => t.id === tierId);
+                if (!tier) return;
+                rmInlineEdit(ghostStep, 'rm-inline-input', 'New step…', '', v => {
+                    (tier.steps = tier.steps || []).push({ id: uid(), title: v, done: false });
+                    saveRoadmap(); renderRoadmap();
+                });
+                return;
+            }
+
+            // Ghost "add tier" card
+            const ghostTier = e.target.closest('.rm-add-ghost-tier');
+            if (ghostTier && !ghostTier.querySelector('input')) {
+                rmInlineEdit(ghostTier, 'rm-tier-title-input', 'New tier name…', '', v => {
+                    projectRoadmap.tiers.push({ id: uid(), title: v, steps: [], started: false });
+                    saveRoadmap(); renderRoadmap();
+                });
+                return;
             }
         });
 
