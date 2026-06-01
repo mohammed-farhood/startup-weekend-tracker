@@ -350,6 +350,65 @@
         /* Tier title and step title are clickable to rename — show cursor */
         .rm-tier-title[data-tier] { cursor: text; }
         .rm-step-title[data-tier] { cursor: text; }
+
+        /* ── A1: Roadmap Step Assignee ────────────────────────────── */
+        .rm-step-av { flex:none; width:16px; height:16px; border-radius:50%; font-size:0.58rem; font-weight:700; display:grid; place-items:center; color:#fff; cursor:pointer; transition:transform 120ms; }
+        .rm-step-av:hover { transform:scale(1.18); }
+        .rm-step-av.mohammed { background:var(--user-mohammed,#1F5C3A); }
+        .rm-step-av.eyad     { background:var(--user-eyad,#7C3AED); }
+        .rm-step-av.yusuf    { background:var(--user-yusuf,#38BDF8); color:var(--user-yusuf-on,#0369A1); }
+        .rm-step-assign-btn  { flex:none; width:16px; height:16px; border-radius:50%; border:1.5px dashed var(--border,#e3dccf); background:none; color:var(--color-text-muted,#8a8175); font-size:0.55rem; display:grid; place-items:center; cursor:pointer; opacity:0; transition:opacity 140ms; padding:0; }
+        .rm-step:hover .rm-step-assign-btn { opacity:1; }
+        .rm-step-quick-assign { display:flex; align-items:center; gap:6px; padding:4px 0 4px 36px; font-size:0.75rem; color:var(--color-text-muted,#8a8175); animation: fadeInUp 200ms ease-out; }
+        .rm-qa-label { font-size:0.72rem; }
+        .rm-qav { width:22px; height:22px; border-radius:50%; font-size:0.65rem; font-weight:700; display:grid; place-items:center; cursor:pointer; border:none; transition:transform 120ms; color:#fff; }
+        .rm-qav-m { background:var(--user-mohammed,#1F5C3A); }
+        .rm-qav-e { background:var(--user-eyad,#7C3AED); }
+        .rm-qav-y { background:var(--user-yusuf,#38BDF8); color:var(--user-yusuf-on,#0369A1); }
+        .rm-qav-skip { background:var(--border,#e3dccf); color:var(--color-text-muted,#8a8175); }
+        .rm-qav:hover { transform:scale(1.12); }
+        @keyframes fadeInUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+        /* ── A2: Roadmap Tier Deadline ────────────────────────────── */
+        .rm-tier { position:relative; }
+        .rm-tier-deadline { flex:none; display:inline-flex; align-items:center; gap:4px; font-family:'Instrument Sans',sans-serif; font-size:0.7rem; font-weight:500; padding:3px 8px; border-radius:10px; cursor:pointer; transition:background 140ms,border-color 140ms,color 140ms; border:1px dashed var(--border,#e3dccf); color:var(--color-text-muted,#8a8175); background:none; white-space:nowrap; }
+        .rm-tier-deadline:hover { border-color:var(--accent,#C2620E); color:var(--accent,#C2620E); }
+        .rm-tier-deadline-set { border:1px solid var(--accent,#C2620E) !important; color:var(--accent-deep,#9B4E0B) !important; background:var(--accent-glow,rgba(194,98,14,0.12)) !important; }
+        .rm-tier-deadline-overdue { border:1px solid #E11D48 !important; color:#E11D48 !important; background:rgba(225,29,72,0.07) !important; }
+        .rm-urgent-dot { width:6px; height:6px; border-radius:50%; background:#E11D48; animation:rm-pulse 1.5s ease-in-out infinite; flex:none; display:inline-block; margin-right:2px; }
+        .rm-deadline-popover { background:var(--bg,#FAF7F2); border:1px solid var(--border,#e3dccf); border-radius:10px; padding:12px 14px; box-shadow:0 8px 24px rgba(0,0,0,0.10); z-index:50; display:flex; flex-direction:column; gap:8px; min-width:190px; }
+        .rm-dl-label, .rm-ts-label { font-size:0.8rem; color:var(--color-text-muted,#8a8175); display:flex; flex-direction:column; gap:3px; cursor:pointer; }
+        .rm-ts-label { flex-direction:row; align-items:center; gap:6px; }
+        .rm-deadline-input { border:1px solid var(--border,#e3dccf); border-radius:6px; padding:4px 8px; background:var(--surface,#F0E9DD); font-family:inherit; font-size:0.82rem; }
+        .rm-dl-actions { display:flex; gap:8px; margin-top:2px; }
+        .rm-dl-save { background:var(--accent,#C2620E); color:#fff; border:none; border-radius:6px; padding:5px 12px; font-size:0.78rem; font-weight:600; cursor:pointer; font-family:inherit; }
+        .rm-dl-clear { background:none; border:none; color:var(--color-text-muted,#8a8175); font-size:0.78rem; cursor:pointer; text-decoration:underline; font-family:inherit; }
+
+        /* ── A3: Roadmap Tier Connections ─────────────────────────── */
+        .rm-connect-btn { flex:none; background:none; border:none; color:transparent; cursor:pointer; font-size:0.72rem; padding:3px 6px; border-radius:6px; transition:color 140ms; }
+        .rm-step:hover .rm-connect-btn { color:var(--color-text-muted,#8a8175); }
+        .rm-connect-btn.rm-connect-active { color:var(--accent,#C2620E) !important; }
+        .rm-conn-badge { font-size:0.68rem; font-weight:700; color:var(--accent,#C2620E); }
+        .rm-crossover-connector { display:flex; align-items:center; gap:6px; margin:2px 0 4px 32px; }
+        .rm-xover-line { width:32px; height:1.5px; background:linear-gradient(to right,var(--accent,#C2620E),transparent); flex:none; }
+        .rm-xover-label { font-size:0.7rem; font-weight:600; color:var(--accent,#C2620E); letter-spacing:0.03em; }
+        .rm-tier-incoming { border-top:2px solid var(--accent,#C2620E); }
+        .rm-connect-popover { background:var(--bg,#FAF7F2); border:1px solid var(--border,#e3dccf); border-radius:10px; padding:12px 14px; box-shadow:0 8px 24px rgba(0,0,0,0.10); z-index:50; display:flex; flex-direction:column; gap:8px; min-width:180px; }
+        .rm-conn-pop-label { font-size:0.78rem; color:var(--color-text-muted,#8a8175); }
+        .rm-connect-select { border:1px solid var(--border,#e3dccf); border-radius:6px; padding:4px 8px; background:var(--surface,#F0E9DD); font-family:inherit; font-size:0.82rem; }
+        .rm-conn-save { background:var(--accent,#C2620E); color:#fff; border:none; border-radius:6px; padding:5px 12px; font-size:0.78rem; font-weight:600; cursor:pointer; font-family:inherit; margin-top:2px; }
+
+        /* ── A5: Brief multi-file ─────────────────────────────────── */
+        .brief-section { display:flex; flex-direction:column; gap:8px; }
+        .brief-file-list { display:flex; flex-direction:column; gap:6px; }
+        .brief-file-card { display:flex; align-items:center; justify-content:space-between; background:var(--surface,#F0E9DD); border:1px solid var(--border,#e3dccf); border-radius:10px; padding:10px 14px; gap:12px; }
+        .brief-file-info { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
+        .brief-file-icon { color:var(--accent,#C2620E); flex:none; }
+        .brief-file-name { font-size:0.85rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
+        .brief-file-meta { font-size:0.72rem; color:var(--color-text-muted,#8a8175); }
+        .brief-file-actions { display:flex; align-items:center; gap:8px; flex:none; }
+        .brief-add-label { display:inline-flex; align-items:center; gap:6px; font-size:0.82rem; color:var(--accent,#C2620E); cursor:pointer; padding:6px 0; font-style:italic; }
+        .brief-add-label:hover { text-decoration:underline; }
     </style>
 </head>
 <body>
@@ -538,21 +597,13 @@
             <div class="section-header">
                 <h2>Brief</h2>
             </div>
-            <div id="briefEmpty" class="brief-empty-state" style="display:none;">
-                <label for="briefUploadInput" class="brief-upload-label">+ Upload brief (.html)</label>
-                <input type="file" id="briefUploadInput" accept=".html" style="display:none;">
-            </div>
-            <div id="briefExists" class="brief-exists-state" style="display:none;">
-                <div class="brief-meta-info">
-                    <span class="brief-filename" id="briefFilename"></span>
-                    <span class="brief-updated-by" id="briefUpdatedBy"></span>
-                </div>
-                <div class="brief-actions-row">
-                    <button id="briefViewBtn" class="primary-btn" style="padding:8px 16px;font-size:14px;">View</button>
-                    <label for="briefReplaceInput" class="brief-replace-label">Replace</label>
-                    <input type="file" id="briefReplaceInput" accept=".html" style="display:none;">
-                    <button id="briefRemoveBtn" class="text-btn" style="color:var(--color-text-muted);">Remove</button>
-                </div>
+            <div id="briefSection" class="brief-section">
+              <div id="briefFileList" class="brief-file-list"></div>
+              <label for="briefAddInput" class="brief-add-label" id="briefAddLabel">
+                <span class="ic sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+                Upload brief (.html)
+              </label>
+              <input type="file" id="briefAddInput" accept=".html" multiple style="display:none;">
             </div>
         </section>
     </div>

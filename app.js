@@ -1226,6 +1226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let projectTasks = JSON.parse(localStorage.getItem('projectTasks_' + projectId)) || [];
+        let briefData = { files: [] };
         const saveProjectTasks = () => {
             localStorage.setItem('projectTasks_' + projectId, JSON.stringify(projectTasks));
             if (!_fbSync) db.ref('data/projectTasksByProject/' + projectId).set(projectTasks);
@@ -1496,11 +1497,38 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!sel) return;
             const cur = sel.value;
             sel.innerHTML = '<option value="">No specific task</option>';
-            projectTasks.forEach(t => {
-                const o = document.createElement('option');
-                o.value = t.id; o.textContent = t.text;
-                sel.appendChild(o);
-            });
+
+            // Roadmap steps (per tier, only undone)
+            const hasTiers = projectRoadmap && projectRoadmap.tiers && projectRoadmap.tiers.length > 0;
+            if (hasTiers) {
+                projectRoadmap.tiers.forEach((tier, ti) => {
+                    const undone = (tier.steps || []).filter(s => !s.done);
+                    if (!undone.length) return;
+                    const grp = document.createElement('optgroup');
+                    grp.label = 'Tier ' + (ti + 1) + ' — ' + tier.title;
+                    undone.forEach(s => {
+                        const o = document.createElement('option');
+                        o.value = 'rm:' + s.id;
+                        o.textContent = s.title;
+                        grp.appendChild(o);
+                    });
+                    sel.appendChild(grp);
+                });
+            }
+
+            // Regular project tasks (only undone)
+            const undone = projectTasks.filter(t => !t.completed);
+            if (undone.length) {
+                const taskGrp = hasTiers ? document.createElement('optgroup') : null;
+                if (taskGrp) { taskGrp.label = 'Tasks'; sel.appendChild(taskGrp); }
+                undone.forEach(t => {
+                    const o = document.createElement('option');
+                    o.value = t.id;
+                    o.textContent = t.text;
+                    (taskGrp || sel).appendChild(o);
+                });
+            }
+
             if (cur) sel.value = cur;
         }
 
@@ -1708,15 +1736,27 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('startTimerBtn')?.addEventListener('click', () => {
             const user = getCurrentUser(); if (!user) return;
             const sel    = document.getElementById('timerTaskSelect');
-            const taskId = sel && sel.value ? sel.value : null;
-            const task   = taskId ? projectTasks.find(t => t.id == taskId) : null;
+            const selVal = sel && sel.value ? sel.value : null;
+            let taskId = selVal, taskName = null;
+            if (selVal && selVal.startsWith('rm:')) {
+                const stepId = selVal.slice(3);
+                let foundStep = null;
+                (projectRoadmap.tiers || []).forEach(t => {
+                    const s = (t.steps||[]).find(x => x.id === stepId);
+                    if (s) foundStep = s;
+                });
+                taskName = foundStep ? foundStep.title : selVal;
+            } else if (selVal) {
+                const task = projectTasks.find(t => t.id == selVal);
+                taskName = task ? task.text : null;
+            }
             const d      = loadTimeData();
             const existing = d.activeSessions[user];
             if (existing) {
                 const dur = Math.min(Math.floor((Date.now() - existing.startTime) / 1000), MAX_SESSION_SEC);
                 if (dur > 0) d.sessions.push({ id: uid(), user, taskId: existing.taskId, taskName: existing.taskName, duration: dur, endedAt: Date.now() });
             }
-            d.activeSessions[user] = { taskId, taskName: task ? task.text : null, startTime: Date.now(), lastTick: Date.now() };
+            d.activeSessions[user] = { taskId, taskName, startTime: Date.now(), lastTick: Date.now() };
             saveTimeData(d);
             renderTimerUI();
         });
@@ -1806,7 +1846,17 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             db.ref('data/projectBriefByProject/' + projectId).off();
             db.ref('data/projectBriefByProject/' + projectId).on('value', snap => {
-                renderBrief(snap.val());
+                const raw = snap.val();
+                if (!raw) {
+                    briefData = { files: [] };
+                } else if (raw.html !== undefined) {
+                    // Legacy format — normalize in memory, don't rewrite Firebase
+                    briefData = { files: [{ id: 'legacy', html: raw.html, filename: raw.filename || 'brief.html', uploadedAt: raw.updatedAt || Date.now(), uploadedBy: raw.updatedBy || '' }] };
+                } else {
+                    briefData = raw;
+                    if (!Array.isArray(briefData.files)) briefData.files = [];
+                }
+                renderBrief();
             });
             db.ref('data/projectRoadmapByProject/' + projectId).off();
             db.ref('data/projectRoadmapByProject/' + projectId).on('value', snap => {
@@ -1841,12 +1891,24 @@ document.addEventListener('DOMContentLoaded', () => {
             return { total, done };
         }
 
+        function formatShortDate(iso) {
+            const [y,m,day] = iso.split('-');
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return months[parseInt(m)-1] + ' ' + parseInt(day);
+        }
+
         function renderRoadmap() {
             const wrap = document.getElementById('roadmap');
             if (!wrap) return;
             const { total, done } = roadmapStats();
             const metaEl = document.getElementById('roadmapMeta');
             if (metaEl) metaEl.textContent = total ? `${done} / ${total} steps` : '';
+
+            // A3: compute incoming tier IDs (tiers that are targets of a connection)
+            const incomingTierIds = new Set();
+            projectRoadmap.tiers.forEach(t => (t.steps||[]).forEach(s => {
+                if (s.connectsToTierId) incomingTierIds.add(s.connectsToTierId);
+            }));
 
             let html = '';
             if (projectRoadmap.tiers.length === 0) {
@@ -1866,13 +1928,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (tierDone)   tierClass += ' rm-tier-done';
                     if (tierActive) tierClass += ' rm-tier-active';
                     if (tierLocked) tierClass += ' rm-tier-locked';
+                    if (incomingTierIds.has(tier.id)) tierClass += ' rm-tier-incoming';
+
+                    // A2: deadline chip
+                    const today = new Date().toISOString().slice(0,10);
+                    const dlState = !tier.deadline ? 'rm-tier-deadline-empty'
+                        : (!tierDone && tier.deadline < today) ? 'rm-tier-deadline-overdue'
+                        : 'rm-tier-deadline-set';
+                    const dlLabel = tier.deadline
+                        ? (tier.timeSensitive ? '<span class="rm-urgent-dot"></span>' : '') + formatShortDate(tier.deadline)
+                        : 'deadline';
+                    const dlChip = `<button class="rm-tier-deadline ${dlState}" data-tier="${tier.id}" title="Set deadline">${icon('calendar','sm')} ${dlLabel}</button>`;
 
                     let startBtn = '';
                     if (tierLocked) {
                         startBtn = `<button class="rm-start-btn" data-tier="${tier.id}" title="Start this tier">${icon('play','sm')} Start</button>`;
                     }
 
-                    const stepsHtml = steps.map(s => {
+                    let stepsHtmlParts = [];
+                    steps.forEach(s => {
                         let state;
                         if (s.done) {
                             state = 'done';
@@ -1884,19 +1958,41 @@ document.addEventListener('DOMContentLoaded', () => {
                             state = 'future';
                         }
                         const hereTag = (state === 'current') ? '<span class="rm-here">you are here</span>' : '';
-                        return `<div class="rm-step ${state}" data-tier="${tier.id}" data-step="${s.id}">
+                        // Assignee avatar or assign button (A1)
+                        let assigneeEl = '';
+                        if (s.assignee) {
+                            const initial = s.assignee.charAt(0).toUpperCase();
+                            assigneeEl = `<span class="rm-step-av rm-step-av-${escH(s.assignee.toLowerCase())}" data-tier="${tier.id}" data-step="${s.id}">${initial}</span>`;
+                        } else {
+                            assigneeEl = `<button class="rm-step-assign-btn" data-tier="${tier.id}" data-step="${s.id}" title="Assign">${icon('user','sm')}</button>`;
+                        }
+                        // Connect button (A3)
+                        const connActive = !!s.connectsToTierId;
+                        const connTarget = connActive ? projectRoadmap.tiers.findIndex(t => t.id === s.connectsToTierId) + 1 : null;
+                        const connBtn = `<button class="rm-connect-btn${connActive ? ' rm-connect-active' : ''}" data-tier="${tier.id}" data-step="${s.id}" title="Connect to tier">${connActive ? '<span class="rm-conn-badge">→T' + connTarget + '</span>' : icon('chevronRight','sm')}</button>`;
+                        let stepRowHtml = `<div class="rm-step ${state}" data-tier="${tier.id}" data-step="${s.id}">
                             <span class="rm-node" data-tier="${tier.id}" data-step="${s.id}"></span>
                             <span class="rm-step-title" data-tier="${tier.id}" data-step="${s.id}">${escH(s.title)}</span>
                             ${hereTag}
                             <button class="rm-del rm-del-step" data-tier="${tier.id}" data-step="${s.id}" title="Delete step">${icon('close', 'sm')}</button>
+                            ${assigneeEl}
+                            ${connBtn}
                         </div>`;
-                    }).join('');
+                        // Crossover connector (A3)
+                        if (s.connectsToTierId) {
+                            const targetIdx = projectRoadmap.tiers.findIndex(t => t.id === s.connectsToTierId) + 1;
+                            stepRowHtml += `<div class="rm-crossover-connector"><div class="rm-xover-line"></div><span class="rm-xover-label">→ Tier ${targetIdx}</span></div>`;
+                        }
+                        stepsHtmlParts.push(stepRowHtml);
+                    });
+                    const stepsHtml = stepsHtmlParts.join('');
                     const ghostStep = `<div class="rm-add-ghost rm-add-ghost-step" data-tier="${tier.id}">${icon('plus','sm')} add step</div>`;
 
                     html += `<div class="${tierClass}" data-tier-id="${tier.id}">
                         <div class="rm-tier-head">
                             <span class="rm-tier-badge">${tierDone ? icon('check', 'sm') : (ti + 1)}</span>
                             <span class="rm-tier-title" data-tier="${tier.id}">${escH(tier.title)}</span>
+                            ${dlChip}
                             ${startBtn}
                             <button class="rm-del rm-del-tier" data-tier="${tier.id}" title="Delete tier">${icon('trash', 'sm')}</button>
                         </div>
@@ -1908,6 +2004,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<div class="rm-add-ghost rm-add-ghost-tier">${icon('plus','sm')} add tier</div>`;
             wrap.innerHTML = html;
             updateProjectProgress();
+            populateTimerSelect();
         }
 
         // Helper: swap an element to an inline input, call onCommit(value) on Enter/blur-save, cancel on Esc/blur-empty
@@ -1943,6 +2040,36 @@ document.addEventListener('DOMContentLoaded', () => {
                     const v = inp.value.trim();
                     if (v) commit(); else cancel();
                 }
+            });
+        }
+
+        // A1: Quick-assign bar shown after adding a new step
+        function showQuickAssign(stepId) {
+            const stepEl = document.querySelector(`.rm-step[data-step="${stepId}"]`);
+            if (!stepEl) return;
+            const qa = document.createElement('div');
+            qa.className = 'rm-step-quick-assign';
+            qa.dataset.step = stepId;
+            qa.innerHTML = `<span class="rm-qa-label">Assign:</span>
+                <button class="rm-qav rm-qav-m" data-step="${stepId}" data-assignee="Mohammed" title="Mohammed">M</button>
+                <button class="rm-qav rm-qav-e" data-step="${stepId}" data-assignee="Eyad" title="Eyad">E</button>
+                <button class="rm-qav rm-qav-y" data-step="${stepId}" data-assignee="Yusuf" title="Yusuf">Y</button>
+                <button class="rm-qav rm-qav-skip" data-step="${stepId}" data-assignee="" title="Skip">·</button>`;
+            stepEl.insertAdjacentElement('afterend', qa);
+
+            // Auto-dismiss after 4 seconds
+            const t = setTimeout(() => qa.remove(), 4000);
+            qa.querySelectorAll('.rm-qav').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    clearTimeout(t);
+                    const tierId = projectRoadmap.tiers.find(tier =>
+                        (tier.steps||[]).find(s => s.id === stepId))?.id;
+                    const tier = projectRoadmap.tiers.find(t => t.id === tierId);
+                    const step = tier && (tier.steps||[]).find(s => s.id === stepId);
+                    if (step) { step.assignee = btn.dataset.assignee; saveRoadmap(); }
+                    qa.remove();
+                    renderRoadmap();
+                });
             });
         }
 
@@ -2022,6 +2149,120 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            // A1: Click assigned avatar → cycle: Mohammed→Eyad→Yusuf→''→Mohammed
+            const stepAv = e.target.closest('.rm-step-av');
+            if (stepAv) {
+                const tier = projectRoadmap.tiers.find(t => t.id === stepAv.dataset.tier);
+                const step = tier && (tier.steps || []).find(s => s.id === stepAv.dataset.step);
+                if (step) {
+                    const cycle = ['Mohammed','Eyad','Yusuf',''];
+                    const idx = cycle.indexOf(step.assignee || '');
+                    step.assignee = cycle[(idx + 1) % cycle.length];
+                    saveRoadmap(); renderRoadmap();
+                }
+                return;
+            }
+            // A1: Click unassigned btn → cycle to Mohammed first
+            const assignBtn = e.target.closest('.rm-step-assign-btn');
+            if (assignBtn) {
+                const tier = projectRoadmap.tiers.find(t => t.id === assignBtn.dataset.tier);
+                const step = tier && (tier.steps || []).find(s => s.id === assignBtn.dataset.step);
+                if (step) { step.assignee = 'Mohammed'; saveRoadmap(); renderRoadmap(); }
+                return;
+            }
+
+            // A2: Deadline chip → show popover
+            const dlBtn = e.target.closest('.rm-tier-deadline');
+            if (dlBtn && !dlBtn.closest('.rm-deadline-popover')) {
+                e.stopPropagation();
+                // Close any existing popover
+                document.querySelectorAll('.rm-deadline-popover').forEach(p => p.remove());
+                const tierId = dlBtn.dataset.tier;
+                const tier = projectRoadmap.tiers.find(t => t.id === tierId);
+                if (!tier) return;
+                const pop = document.createElement('div');
+                pop.className = 'rm-deadline-popover';
+                pop.innerHTML = `
+                    <label class="rm-dl-label">Deadline
+                      <input type="date" class="rm-deadline-input" value="${tier.deadline || ''}">
+                    </label>
+                    <label class="rm-ts-label">
+                      <input type="checkbox" class="rm-ts-check" ${tier.timeSensitive ? 'checked' : ''}> Time-sensitive
+                    </label>
+                    <div class="rm-dl-actions">
+                      <button class="rm-dl-save">Save</button>
+                      <button class="rm-dl-clear">Clear</button>
+                    </div>`;
+                dlBtn.parentElement.appendChild(pop);
+                // Position popover below the button
+                pop.style.position = 'absolute';
+                pop.style.top = (dlBtn.offsetTop + dlBtn.offsetHeight + 4) + 'px';
+                pop.style.left = dlBtn.offsetLeft + 'px';
+
+                pop.querySelector('.rm-dl-save').addEventListener('click', () => {
+                    const dateVal = pop.querySelector('.rm-deadline-input').value;
+                    const tsVal = pop.querySelector('.rm-ts-check').checked;
+                    tier.deadline = dateVal || null;
+                    tier.timeSensitive = tsVal && !!dateVal;
+                    saveRoadmap(); pop.remove(); renderRoadmap();
+                });
+                pop.querySelector('.rm-dl-clear').addEventListener('click', () => {
+                    tier.deadline = null; tier.timeSensitive = false;
+                    saveRoadmap(); pop.remove(); renderRoadmap();
+                });
+                const closePopover = (ev) => {
+                    if (!ev.target.closest('.rm-deadline-popover') && !ev.target.closest('.rm-tier-deadline')) {
+                        document.querySelectorAll('.rm-deadline-popover').forEach(p => p.remove());
+                        document.removeEventListener('click', closePopover);
+                    }
+                };
+                setTimeout(() => document.addEventListener('click', closePopover), 0);
+                return;
+            }
+
+            // A3: Connect button → show popover
+            const connBtn = e.target.closest('.rm-connect-btn');
+            if (connBtn) {
+                e.stopPropagation();
+                document.querySelectorAll('.rm-connect-popover').forEach(p => p.remove());
+                const tierId = connBtn.dataset.tier;
+                const stepId = connBtn.dataset.step;
+                const tier = projectRoadmap.tiers.find(t => t.id === tierId);
+                const step = tier && (tier.steps||[]).find(s => s.id === stepId);
+                if (!step) return;
+
+                const otherTiers = projectRoadmap.tiers.filter(t => t.id !== tierId);
+                if (!otherTiers.length) return;
+
+                const pop = document.createElement('div');
+                pop.className = 'rm-connect-popover';
+                pop.innerHTML = `<div class="rm-conn-pop-label">Connect to tier:</div>
+                    <select class="rm-connect-select">
+                        <option value="">None</option>
+                        ${otherTiers.map((t) => {
+                            const idx = projectRoadmap.tiers.indexOf(t) + 1;
+                            return `<option value="${t.id}" ${step.connectsToTierId === t.id ? 'selected' : ''}>Tier ${idx} — ${escH(t.title)}</option>`;
+                        }).join('')}
+                    </select>
+                    <button class="rm-conn-save">Save</button>`;
+                connBtn.parentElement.appendChild(pop);
+                pop.style.cssText = 'position:absolute;right:0;top:' + (connBtn.offsetTop + connBtn.offsetHeight + 4) + 'px;';
+
+                pop.querySelector('.rm-conn-save').addEventListener('click', () => {
+                    step.connectsToTierId = pop.querySelector('.rm-connect-select').value || null;
+                    saveRoadmap(); pop.remove(); renderRoadmap();
+                });
+                setTimeout(() => {
+                    const close = (ev) => {
+                        if (!ev.target.closest('.rm-connect-popover') && !ev.target.closest('.rm-connect-btn')) {
+                            pop.remove(); document.removeEventListener('click', close);
+                        }
+                    };
+                    document.addEventListener('click', close);
+                }, 0);
+                return;
+            }
+
             // Ghost "add step" row
             const ghostStep = e.target.closest('.rm-add-ghost-step');
             if (ghostStep && !ghostStep.querySelector('input')) {
@@ -2029,8 +2270,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tier = projectRoadmap.tiers.find(t => t.id === tierId);
                 if (!tier) return;
                 rmInlineEdit(ghostStep, 'rm-inline-input', 'New step…', '', v => {
-                    (tier.steps = tier.steps || []).push({ id: uid(), title: v, done: false });
+                    const newStepId = uid();
+                    (tier.steps = tier.steps || []).push({ id: newStepId, title: v, done: false });
                     saveRoadmap(); renderRoadmap();
+                    showQuickAssign(newStepId);
                 });
                 return;
             }
@@ -2046,68 +2289,89 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // ── Project Brief ─────────────────────────────────────────────────────
-        function renderBrief(data) {
-            const emptyEl  = document.getElementById('briefEmpty');
-            const existsEl = document.getElementById('briefExists');
-            if (!data) {
-                if (emptyEl)  emptyEl.style.display  = 'block';
-                if (existsEl) existsEl.style.display = 'none';
-            } else {
-                if (emptyEl)  emptyEl.style.display  = 'none';
-                if (existsEl) existsEl.style.display = 'block';
-                const fnEl = document.getElementById('briefFilename');
-                const ubEl = document.getElementById('briefUpdatedBy');
-                if (fnEl) fnEl.textContent = data.filename || 'brief.html';
-                if (ubEl) ubEl.textContent = data.updatedBy ? `Updated by ${data.updatedBy}` : '';
+        // ── Project Brief (A5: multi-file) ───────────────────────────────────
+        function renderBrief() {
+            const list = document.getElementById('briefFileList');
+            const addLabel = document.getElementById('briefAddLabel');
+            if (!list) return;
+
+            if (!briefData.files || briefData.files.length === 0) {
+                list.innerHTML = '<div class="brief-empty-state"><label for="briefAddInput" class="brief-upload-label">' + icon('plus','sm') + ' Upload brief (.html)</label></div>';
+                if (addLabel) addLabel.style.display = 'none';
+                return;
             }
+
+            if (addLabel) addLabel.style.display = '';
+
+            list.innerHTML = briefData.files.map(f => {
+                const d = new Date(f.uploadedAt || Date.now());
+                const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const uploaderName = f.uploadedBy ? (f.uploadedBy.charAt(0) + f.uploadedBy.slice(1).toLowerCase()) : 'Unknown';
+                return `<div class="brief-file-card" data-id="${f.id}">
+                    <div class="brief-file-info">
+                        <div class="brief-file-icon">${icon('notes')}</div>
+                        <div>
+                            <div class="brief-file-name">${escH(f.filename || 'brief.html')}</div>
+                            <div class="brief-file-meta">${escH(uploaderName)} · ${dateStr}</div>
+                        </div>
+                    </div>
+                    <div class="brief-file-actions">
+                        <button class="primary-btn brief-view-btn" data-id="${f.id}" style="padding:6px 12px;font-size:0.8rem;">View</button>
+                        <button class="text-btn brief-del-btn" data-id="${f.id}" style="font-size:0.8rem;color:var(--color-text-muted);">Remove</button>
+                    </div>
+                </div>`;
+            }).join('');
         }
+
+        document.getElementById('briefFileList')?.addEventListener('click', e => {
+            const viewBtn = e.target.closest('.brief-view-btn');
+            const delBtn = e.target.closest('.brief-del-btn');
+            if (viewBtn) {
+                const f = briefData.files.find(x => x.id === viewBtn.dataset.id);
+                if (!f) return;
+                const overlay = document.getElementById('briefOverlay');
+                const iframe = document.getElementById('briefIframe');
+                const titleEl = document.getElementById('briefOverlayTitle');
+                if (titleEl) titleEl.textContent = f.filename || 'Brief';
+                if (iframe) iframe.srcdoc = f.html;
+                if (overlay) overlay.style.display = 'flex';
+            }
+            if (delBtn) {
+                const f = briefData.files.find(x => x.id === delBtn.dataset.id);
+                if (!f || !confirm('Remove "' + (f.filename || 'this brief') + '"?')) return;
+                briefData.files = briefData.files.filter(x => x.id !== delBtn.dataset.id);
+                if (!_fbSync) db.ref('data/projectBriefByProject/' + projectId).set(briefData.files.length ? briefData : null);
+                renderBrief();
+            }
+        });
 
         // TODO: move briefs to Firebase Storage to avoid bloating the Realtime DB node
         function handleBriefUpload(file) {
             if (!file) return;
             if (file.size > 800 * 1024) {
-                alert('This file is too large (' + Math.round(file.size / 1024) + ' KB). Please use a brief under 800 KB — remove embedded images or link them externally instead.');
+                alert('This file is too large (' + Math.round(file.size/1024) + ' KB). Please use a brief under 800 KB.');
                 return;
             }
             const reader = new FileReader();
-            reader.onload = e => {
-                db.ref('data/projectBriefByProject/' + projectId).set({
-                    html: e.target.result,
-                    filename: file.name,
-                    updatedAt: Date.now(),
-                    updatedBy: getCurrentUser()
-                });
+            reader.onload = ev => {
+                if (!Array.isArray(briefData.files)) briefData.files = [];
+                briefData.files.push({ id: uid(), html: ev.target.result, filename: file.name, uploadedAt: Date.now(), uploadedBy: getCurrentUser() || '' });
+                if (!_fbSync) db.ref('data/projectBriefByProject/' + projectId).set(briefData);
+                renderBrief();
             };
             reader.readAsText(file);
         }
 
-        document.getElementById('briefUploadInput')?.addEventListener('change', function () {
-            handleBriefUpload(this.files[0]); this.value = '';
+        document.getElementById('briefAddInput')?.addEventListener('change', function() {
+            Array.from(this.files).forEach(f => handleBriefUpload(f));
+            this.value = '';
         });
-        document.getElementById('briefReplaceInput')?.addEventListener('change', function () {
-            handleBriefUpload(this.files[0]); this.value = '';
-        });
-        document.getElementById('briefViewBtn')?.addEventListener('click', () => {
-            db.ref('data/projectBriefByProject/' + projectId).once('value', snap => {
-                const data = snap.val(); if (!data) return;
-                const overlay = document.getElementById('briefOverlay');
-                const iframe  = document.getElementById('briefIframe');
-                const title   = document.getElementById('briefOverlayTitle');
-                if (title)   title.textContent = data.filename || 'Brief';
-                if (iframe)  iframe.srcdoc = data.html;
-                if (overlay) overlay.style.display = 'flex';
-            });
-        });
+
         document.getElementById('briefCloseBtn')?.addEventListener('click', () => {
             const overlay = document.getElementById('briefOverlay');
             if (overlay) { overlay.style.display = 'none'; }
             const iframe = document.getElementById('briefIframe');
             if (iframe) iframe.srcdoc = '';
-        });
-        document.getElementById('briefRemoveBtn')?.addEventListener('click', () => {
-            if (!confirm('Remove this brief?')) return;
-            db.ref('data/projectBriefByProject/' + projectId).remove();
         });
 
         setInterval(renderTimerUI, 1000);
