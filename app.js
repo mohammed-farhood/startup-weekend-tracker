@@ -175,10 +175,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ── Time-grid constants ───────────────────────────────────────────────────
+    const WTG_HOUR_START = 6;   // 6 AM
+    const WTG_HOUR_END   = 23;  // show through 10 PM (last label = 10 PM)
+    const WTG_HOUR_H     = 64;  // px per hour
+    const WTG_HOURS      = Array.from({ length: WTG_HOUR_END - WTG_HOUR_START }, (_, i) => WTG_HOUR_START + i);
+
+    function wtgFmtHour(h) {
+        if (h === 0)  return '12 AM';
+        if (h < 12)   return h + ' AM';
+        if (h === 12) return '12 PM';
+        return (h - 12) + ' PM';
+    }
+
+    function openEventModalPrefilled(ds, hour, mins) {
+        if (eventTitleInput) eventTitleInput.value = '';
+        if (eventDateInput)  eventDateInput.value  = ds;
+        if (eventTimeInput)  eventTimeInput.value  = String(hour).padStart(2,'0') + ':' + String(mins).padStart(2,'0');
+        if (eventPlaceInput) eventPlaceInput.value = '';
+        if (eventModal) eventModal.style.display = 'flex';
+        setTimeout(() => { if (eventTitleInput) eventTitleInput.focus(); }, 50);
+    }
+
     function renderWeekView() {
         if (!weekStrip) return;
-        const days = getWeekDates();
-        const today = new Date(); today.setHours(0,0,0,0);
+        const days   = getWeekDates();
+        const today  = new Date(); today.setHours(0,0,0,0);
         const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         const s = days[0], e = days[6];
         if (weekLabel) {
@@ -188,37 +210,154 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const dayNames = ['Sat','Sun','Mon','Tue','Wed','Thu','Fri'];
+        const now = new Date();
         weekStrip.innerHTML = '';
+
+        // ── Outer container ──────────────────────────────────────────────────
+        const container = document.createElement('div');
+        container.className = 'wtg-container';
+
+        // ── Header row (day names + numbers) ────────────────────────────────
+        const header = document.createElement('div');
+        header.className = 'wtg-header';
+        const gutterSpacer = document.createElement('div');
+        gutterSpacer.className = 'wtg-gutter-spacer';
+        header.appendChild(gutterSpacer);
         days.forEach((d, i) => {
-            const ds = dateStr(d.getFullYear(), d.getMonth(), d.getDate());
+            const ds      = dateStr(d.getFullYear(), d.getMonth(), d.getDate());
             const isToday = d.getTime() === today.getTime();
             const isFri   = d.getDay() === 5;
+            const cell    = document.createElement('div');
+            cell.className = 'wtg-day-head' + (isToday ? ' today' : '') + (isFri ? ' friday' : '');
+            cell.innerHTML = `<span class="wtg-day-name">${dayNames[i]}</span><span class="wtg-day-num">${d.getDate()}</span>`;
+            cell.addEventListener('click', () => openDayDetail(ds));
+            header.appendChild(cell);
+        });
+        container.appendChild(header);
 
-            const dayEvts = events.filter(e => e.date === ds);
-            const dayTds  = (dayTodos[ds] || []).filter(t => !t.completed);
-            const allItems = [
-                ...dayEvts.map(e => ({ type: 'event', text: e.title })),
-                ...dayTds.map(t => ({ type: 'todo',  text: t.text  }))
-            ];
-            const hasTsItem = (dayTodos[ds] || []).some(t => t.timeSensitive && !t.completed);
+        // ── All-day row (timed-less events + all todos) ──────────────────────
+        const alldayRow = document.createElement('div');
+        alldayRow.className = 'wtg-allday-row';
+        const gutterLabel = document.createElement('div');
+        gutterLabel.className = 'wtg-gutter-label';
+        gutterLabel.textContent = 'all‑day';
+        alldayRow.appendChild(gutterLabel);
+        days.forEach(d => {
+            const ds          = dateStr(d.getFullYear(), d.getMonth(), d.getDate());
+            const allDayEvts  = events.filter(ev => ev.date === ds && !ev.time);
+            const dayTds      = (dayTodos[ds] || []).filter(t => !t.completed);
+            const col         = document.createElement('div');
+            col.className     = 'wtg-allday-col';
+            allDayEvts.forEach(ev => {
+                const chip = document.createElement('div');
+                chip.className = 'wtg-allday-chip event';
+                chip.title = ev.title;
+                chip.textContent = ev.title;
+                chip.addEventListener('click', () => openDayDetail(ds));
+                col.appendChild(chip);
+            });
+            dayTds.slice(0, 3).forEach(t => {
+                const chip = document.createElement('div');
+                chip.className = 'wtg-allday-chip todo' + (t.timeSensitive ? ' ts' : '');
+                chip.title = t.text;
+                chip.textContent = t.text;
+                chip.addEventListener('click', () => openDayDetail(ds));
+                col.appendChild(chip);
+            });
+            if (dayTds.length > 3) {
+                const more = document.createElement('div');
+                more.className = 'wtg-allday-chip todo';
+                more.textContent = '+' + (dayTds.length - 3) + ' more';
+                more.style.opacity = '0.55';
+                col.appendChild(more);
+            }
+            alldayRow.appendChild(col);
+        });
+        container.appendChild(alldayRow);
 
-            const card = document.createElement('div');
-            card.className = 'week-day-card' + (isToday ? ' today' : '') + (isFri ? ' friday' : '');
+        // ── Scrollable time grid ─────────────────────────────────────────────
+        const scrollWrap = document.createElement('div');
+        scrollWrap.className = 'wtg-scroll';
 
-            let itemsHtml = allItems.slice(0, 8).map(item =>
-                `<div class="week-mini-item ${item.type}">${esc(item.text)}</div>`
-            ).join('');
-            if (allItems.length > 8) itemsHtml += `<div class="week-more">+${allItems.length - 8} more</div>`;
-            if (hasTsItem) itemsHtml += `<span class="week-ts-dot"></span>`;
+        const grid = document.createElement('div');
+        grid.className = 'wtg-grid';
 
-            card.innerHTML = `
-                <div class="week-day-header">
-                    <span class="week-day-name">${dayNames[i]}</span>
-                    <span class="week-day-num">${d.getDate()}</span>
-                </div>
-                <div class="week-day-body">${itemsHtml}</div>`;
-            card.addEventListener('click', () => openDayDetail(ds));
-            weekStrip.appendChild(card);
+        // Left gutter: hour labels
+        const gutter = document.createElement('div');
+        gutter.className = 'wtg-gutter';
+        WTG_HOURS.forEach(h => {
+            const lbl = document.createElement('div');
+            lbl.className = 'wtg-hour-label';
+            lbl.textContent = wtgFmtHour(h);
+            gutter.appendChild(lbl);
+        });
+        grid.appendChild(gutter);
+
+        // Day columns
+        const daysWrap = document.createElement('div');
+        daysWrap.className = 'wtg-days';
+        days.forEach((d, di) => {
+            const ds      = dateStr(d.getFullYear(), d.getMonth(), d.getDate());
+            const isToday = d.getTime() === today.getTime();
+            const col     = document.createElement('div');
+            col.className = 'wtg-day-col';
+
+            // Hour rows (click to create event)
+            WTG_HOURS.forEach(h => {
+                const row = document.createElement('div');
+                row.className = 'wtg-hour-row';
+                row.innerHTML = '<div class="wtg-half-line"></div>';
+                row.addEventListener('click', ev => {
+                    if (ev.target.closest('.wtg-event-block')) return;
+                    const rect = row.getBoundingClientRect();
+                    const y    = ev.clientY - rect.top;
+                    const mins = y < WTG_HOUR_H / 2 ? 0 : 30;
+                    openEventModalPrefilled(ds, h, mins);
+                });
+                col.appendChild(row);
+            });
+
+            // Timed event blocks
+            events.filter(ev => ev.date === ds && ev.time).forEach(ev => {
+                const [evH, evM] = ev.time.split(':').map(Number);
+                const topPx = (evH - WTG_HOUR_START) * WTG_HOUR_H + (evM / 60) * WTG_HOUR_H;
+                if (topPx < 0 || topPx >= WTG_HOURS.length * WTG_HOUR_H) return;
+                const block = document.createElement('div');
+                block.className = 'wtg-event-block';
+                block.style.top    = topPx + 'px';
+                block.style.height = (WTG_HOUR_H - 4) + 'px';
+                block.innerHTML = `<div class="wtg-event-title">${esc(ev.title)}</div>
+                    <div class="wtg-event-sub">${time12h(ev.time)}${ev.place ? ' · ' + esc(ev.place) : ''}</div>`;
+                block.title = ev.title;
+                col.appendChild(block);
+            });
+
+            // Current-time indicator (amber line + dot)
+            if (isToday) {
+                const nowH   = now.getHours();
+                const nowM   = now.getMinutes();
+                const nowTop = (nowH - WTG_HOUR_START) * WTG_HOUR_H + (nowM / 60) * WTG_HOUR_H;
+                if (nowTop >= 0 && nowTop <= WTG_HOURS.length * WTG_HOUR_H) {
+                    const line = document.createElement('div');
+                    line.className = 'wtg-now-line';
+                    line.style.top = nowTop + 'px';
+                    line.innerHTML = '<div class="wtg-now-dot"></div>';
+                    col.appendChild(line);
+                }
+            }
+
+            daysWrap.appendChild(col);
+        });
+        grid.appendChild(daysWrap);
+        scrollWrap.appendChild(grid);
+        container.appendChild(scrollWrap);
+        weekStrip.appendChild(container);
+
+        // Auto-scroll to current hour (offset 1.5h above) or 8 AM
+        requestAnimationFrame(() => {
+            const targetH  = Math.max(WTG_HOUR_START, now.getHours() - 1);
+            const scrollTo = (targetH - WTG_HOUR_START) * WTG_HOUR_H;
+            scrollWrap.scrollTop = Math.max(0, scrollTo);
         });
     }
 
