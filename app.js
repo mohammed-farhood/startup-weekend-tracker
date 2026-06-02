@@ -176,25 +176,135 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── Time-grid constants ───────────────────────────────────────────────────
-    const WTG_HOUR_START = 6;   // 6 AM
-    const WTG_HOUR_END   = 23;  // show through 10 PM (last label = 10 PM)
+    const WTG_HOUR_START = 6;
+    const WTG_HOUR_END   = 24;  // midnight
     const WTG_HOUR_H     = 64;  // px per hour
     const WTG_HOURS      = Array.from({ length: WTG_HOUR_END - WTG_HOUR_START }, (_, i) => WTG_HOUR_START + i);
+    const WTG_3H         = new Set([6, 9, 12, 15, 18, 21, 24]); // 3-hour block boundaries
+    const WTG_SNAP       = 15;  // snap resolution in minutes
 
     function wtgFmtHour(h) {
-        if (h === 0)  return '12 AM';
-        if (h < 12)   return h + ' AM';
-        if (h === 12) return '12 PM';
-        return (h - 12) + ' PM';
+        const h24 = h % 24;
+        if (h24 === 0)  return '12 AM';
+        if (h24 < 12)  return h24 + ' AM';
+        if (h24 === 12) return '12 PM';
+        return (h24 - 12) + ' PM';
     }
 
     function openEventModalPrefilled(ds, hour, mins) {
         if (eventTitleInput) eventTitleInput.value = '';
         if (eventDateInput)  eventDateInput.value  = ds;
-        if (eventTimeInput)  eventTimeInput.value  = String(hour).padStart(2,'0') + ':' + String(mins).padStart(2,'0');
+        if (eventTimeInput)  eventTimeInput.value  = String(hour % 24).padStart(2,'0') + ':' + String(mins).padStart(2,'0');
         if (eventPlaceInput) eventPlaceInput.value = '';
         if (eventModal) eventModal.style.display = 'flex';
         setTimeout(() => { if (eventTitleInput) eventTitleInput.focus(); }, 50);
+    }
+
+    // ── Quick-create menu (Event | Task) ─────────────────────────────────────
+    function showWtgQuickMenu(ds, h, m, anchorEl) {
+        document.querySelectorAll('.wtg-quick-menu').forEach(el => el.remove());
+        const menu = document.createElement('div');
+        menu.className = 'wtg-quick-menu';
+        const rect = anchorEl.getBoundingClientRect();
+        menu.style.cssText = `position:fixed;top:${rect.top + rect.height / 2}px;left:${rect.left + rect.width / 2}px;`;
+        menu.innerHTML = `
+            <button class="wtg-qm-btn wtg-qm-event">${icon('calendar','sm')} Event</button>
+            <div class="wtg-qm-div"></div>
+            <button class="wtg-qm-btn wtg-qm-task">${icon('check','sm')} Task</button>`;
+        document.body.appendChild(menu);
+
+        menu.querySelector('.wtg-qm-event').addEventListener('click', e => {
+            e.stopPropagation(); menu.remove();
+            openEventModalPrefilled(ds, h, m);
+        });
+
+        menu.querySelector('.wtg-qm-task').addEventListener('click', e => {
+            e.stopPropagation();
+            const timeStr = String(h % 24).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+            menu.innerHTML = `
+                <input class="wtg-qm-input" type="text" placeholder="Task name…">
+                <button class="wtg-qm-save">${icon('check','sm')}</button>`;
+            const inp = menu.querySelector('.wtg-qm-input');
+            inp.focus();
+            const save = () => {
+                const text = inp.value.trim(); if (!text) { menu.remove(); return; }
+                if (!dayTodos[ds]) dayTodos[ds] = [];
+                dayTodos[ds].push({ id: uid(), text, completed: false, time: timeStr });
+                saveDayTodos(); renderWeekView(); renderCalendar(); menu.remove();
+            };
+            inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') save(); if (ev.key === 'Escape') menu.remove(); });
+            menu.querySelector('.wtg-qm-save').addEventListener('click', save);
+        });
+
+        setTimeout(() => {
+            document.addEventListener('click', function _close(ev) {
+                if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', _close); }
+            });
+        }, 0);
+    }
+
+    // ── Drag + resize state (persists across renders) ─────────────────────────
+    let _wtgDrag = null;
+
+    document.addEventListener('mousemove', e => {
+        if (!_wtgDrag) return;
+        const dy      = e.clientY - _wtgDrag.startY;
+        const snapPx  = WTG_SNAP / 60 * WTG_HOUR_H;
+        const snapped = Math.round(dy / snapPx) * snapPx;
+        if (_wtgDrag.type === 'move') {
+            const maxTop = (WTG_HOUR_END - WTG_HOUR_START) * WTG_HOUR_H - _wtgDrag.block.offsetHeight;
+            _wtgDrag.block.style.top = Math.max(0, Math.min(_wtgDrag.origTop + snapped, maxTop)) + 'px';
+        } else {
+            _wtgDrag.block.style.height = Math.max(snapPx, _wtgDrag.origH + snapped) + 'px';
+        }
+    });
+
+    document.addEventListener('mouseup', e => {
+        if (!_wtgDrag) return;
+        const { type, evId, todoId, block, startY, origTop, origH, ds } = _wtgDrag;
+        block.classList.remove('wtg-dragging');
+        document.body.style.userSelect = '';
+        document.body.style.cursor     = '';
+
+        const dy      = e.clientY - startY;
+        const snapPx  = WTG_SNAP / 60 * WTG_HOUR_H;
+        const snapped = Math.round(dy / snapPx) * snapPx;
+
+        function pxToTimeStr(px) {
+            const totalMins = Math.round(px / WTG_HOUR_H * 60 / WTG_SNAP) * WTG_SNAP;
+            const absH = WTG_HOUR_START * 60 + totalMins;
+            return String(Math.floor(absH / 60) % 24).padStart(2,'0') + ':' + String(absH % 60).padStart(2,'0');
+        }
+        function pxToDuration(px) {
+            return Math.max(WTG_SNAP, Math.round(px / WTG_HOUR_H * 60 / WTG_SNAP) * WTG_SNAP);
+        }
+
+        if (evId) {
+            const ev = events.find(x => x.id === evId);
+            if (ev) {
+                if (type === 'move') ev.time = pxToTimeStr(Math.max(0, origTop + snapped));
+                else ev.duration = pxToDuration(Math.max(snapPx, origH + snapped));
+                saveEvents(); renderWeekView();
+            }
+        }
+        if (todoId) {
+            const todo = (dayTodos[ds] || []).find(x => x.id === todoId);
+            if (todo) {
+                if (type === 'move') todo.time = pxToTimeStr(Math.max(0, origTop + snapped));
+                else todo.duration = pxToDuration(Math.max(snapPx, origH + snapped));
+                saveDayTodos(); renderWeekView();
+            }
+        }
+        _wtgDrag = null;
+    });
+
+    function wtgStartDrag(e, block, type, evId, todoId, ds) {
+        e.preventDefault(); e.stopPropagation();
+        _wtgDrag = { type, evId, todoId, block, ds, startY: e.clientY,
+            origTop: parseFloat(block.style.top) || 0, origH: block.offsetHeight };
+        block.classList.add('wtg-dragging');
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = type === 'resize' ? 'ns-resize' : 'grabbing';
     }
 
     function renderWeekView() {
@@ -213,16 +323,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const now = new Date();
         weekStrip.innerHTML = '';
 
-        // ── Outer container ──────────────────────────────────────────────────
         const container = document.createElement('div');
         container.className = 'wtg-container';
 
-        // ── Header row (day names + numbers) ────────────────────────────────
+        // ── Header ──────────────────────────────────────────────────────────
         const header = document.createElement('div');
         header.className = 'wtg-header';
-        const gutterSpacer = document.createElement('div');
-        gutterSpacer.className = 'wtg-gutter-spacer';
-        header.appendChild(gutterSpacer);
+        header.appendChild(Object.assign(document.createElement('div'), { className: 'wtg-gutter-spacer' }));
         days.forEach((d, i) => {
             const ds      = dateStr(d.getFullYear(), d.getMonth(), d.getDate());
             const isToday = d.getTime() === today.getTime();
@@ -235,41 +342,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         container.appendChild(header);
 
-        // ── All-day row (timed-less events + all todos) ──────────────────────
+        // ── All-day row (untimed events + untimed todos) ─────────────────────
         const alldayRow = document.createElement('div');
         alldayRow.className = 'wtg-allday-row';
-        const gutterLabel = document.createElement('div');
-        gutterLabel.className = 'wtg-gutter-label';
-        gutterLabel.textContent = 'all‑day';
-        alldayRow.appendChild(gutterLabel);
+        const alldayLbl = document.createElement('div');
+        alldayLbl.className = 'wtg-gutter-label';
+        alldayLbl.textContent = 'all‑day';
+        alldayRow.appendChild(alldayLbl);
         days.forEach(d => {
-            const ds          = dateStr(d.getFullYear(), d.getMonth(), d.getDate());
-            const allDayEvts  = events.filter(ev => ev.date === ds && !ev.time);
-            const dayTds      = (dayTodos[ds] || []).filter(t => !t.completed);
-            const col         = document.createElement('div');
-            col.className     = 'wtg-allday-col';
-            allDayEvts.forEach(ev => {
-                const chip = document.createElement('div');
-                chip.className = 'wtg-allday-chip event';
-                chip.title = ev.title;
-                chip.textContent = ev.title;
-                chip.addEventListener('click', () => openDayDetail(ds));
-                col.appendChild(chip);
+            const ds         = dateStr(d.getFullYear(), d.getMonth(), d.getDate());
+            const untimedEvt = events.filter(ev => ev.date === ds && !ev.time);
+            const untimedTdo = (dayTodos[ds] || []).filter(t => !t.completed && !t.time);
+            const col        = document.createElement('div');
+            col.className    = 'wtg-allday-col';
+            untimedEvt.forEach(ev => {
+                const c = document.createElement('div');
+                c.className = 'wtg-allday-chip event'; c.textContent = ev.title; c.title = ev.title;
+                c.addEventListener('click', () => openDayDetail(ds)); col.appendChild(c);
             });
-            dayTds.slice(0, 3).forEach(t => {
-                const chip = document.createElement('div');
-                chip.className = 'wtg-allday-chip todo' + (t.timeSensitive ? ' ts' : '');
-                chip.title = t.text;
-                chip.textContent = t.text;
-                chip.addEventListener('click', () => openDayDetail(ds));
-                col.appendChild(chip);
+            untimedTdo.slice(0, 3).forEach(t => {
+                const c = document.createElement('div');
+                c.className = 'wtg-allday-chip todo' + (t.timeSensitive ? ' ts' : '');
+                c.textContent = t.text; c.title = t.text;
+                c.addEventListener('click', () => openDayDetail(ds)); col.appendChild(c);
             });
-            if (dayTds.length > 3) {
+            if (untimedTdo.length > 3) {
                 const more = document.createElement('div');
-                more.className = 'wtg-allday-chip todo';
-                more.textContent = '+' + (dayTds.length - 3) + ' more';
-                more.style.opacity = '0.55';
-                col.appendChild(more);
+                more.className = 'wtg-allday-chip todo'; more.style.opacity = '0.5';
+                more.textContent = '+' + (untimedTdo.length - 3); col.appendChild(more);
             }
             alldayRow.appendChild(col);
         });
@@ -278,17 +378,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // ── Scrollable time grid ─────────────────────────────────────────────
         const scrollWrap = document.createElement('div');
         scrollWrap.className = 'wtg-scroll';
-
         const grid = document.createElement('div');
         grid.className = 'wtg-grid';
 
-        // Left gutter: hour labels
+        // Gutter: show 3h boundary labels boldly, minor hours get empty label (just height)
         const gutter = document.createElement('div');
         gutter.className = 'wtg-gutter';
         WTG_HOURS.forEach(h => {
             const lbl = document.createElement('div');
-            lbl.className = 'wtg-hour-label';
-            lbl.textContent = wtgFmtHour(h);
+            const is3h = WTG_3H.has(h);
+            lbl.className = 'wtg-hour-label' + (is3h ? ' wtg-hl-3h' : ' wtg-hl-minor');
+            lbl.textContent = is3h ? wtgFmtHour(h) : '';
             gutter.appendChild(lbl);
         });
         grid.appendChild(gutter);
@@ -296,46 +396,80 @@ document.addEventListener('DOMContentLoaded', () => {
         // Day columns
         const daysWrap = document.createElement('div');
         daysWrap.className = 'wtg-days';
-        days.forEach((d, di) => {
+        days.forEach(d => {
             const ds      = dateStr(d.getFullYear(), d.getMonth(), d.getDate());
             const isToday = d.getTime() === today.getTime();
             const col     = document.createElement('div');
             col.className = 'wtg-day-col';
 
-            // Hour rows (click to create event)
+            // Hour rows — 3h boundaries get a heavier top rule
             WTG_HOURS.forEach(h => {
                 const row = document.createElement('div');
-                row.className = 'wtg-hour-row';
+                row.className = 'wtg-hour-row' + (WTG_3H.has(h) ? ' wtg-row-3h' : '');
                 row.innerHTML = '<div class="wtg-half-line"></div>';
                 row.addEventListener('click', ev => {
-                    if (ev.target.closest('.wtg-event-block')) return;
+                    if (ev.target.closest('.wtg-event-block,.wtg-task-block,.wtg-quick-menu')) return;
                     const rect = row.getBoundingClientRect();
-                    const y    = ev.clientY - rect.top;
-                    const mins = y < WTG_HOUR_H / 2 ? 0 : 30;
-                    openEventModalPrefilled(ds, h, mins);
+                    const m = (ev.clientY - rect.top) < WTG_HOUR_H / 2 ? 0 : 30;
+                    showWtgQuickMenu(ds, h, m, row);
                 });
                 col.appendChild(row);
             });
 
-            // Timed event blocks
+            // Event blocks (bold, amber) — draggable + resizable
             events.filter(ev => ev.date === ds && ev.time).forEach(ev => {
                 const [evH, evM] = ev.time.split(':').map(Number);
-                const topPx = (evH - WTG_HOUR_START) * WTG_HOUR_H + (evM / 60) * WTG_HOUR_H;
+                const topPx  = (evH - WTG_HOUR_START) * WTG_HOUR_H + (evM / 60) * WTG_HOUR_H;
                 if (topPx < 0 || topPx >= WTG_HOURS.length * WTG_HOUR_H) return;
-                const block = document.createElement('div');
-                block.className = 'wtg-event-block';
-                block.style.top    = topPx + 'px';
-                block.style.height = (WTG_HOUR_H - 4) + 'px';
-                block.innerHTML = `<div class="wtg-event-title">${esc(ev.title)}</div>
-                    <div class="wtg-event-sub">${time12h(ev.time)}${ev.place ? ' · ' + esc(ev.place) : ''}</div>`;
-                block.title = ev.title;
+                const durMins  = ev.duration || 60;
+                const heightPx = Math.max(24, durMins / 60 * WTG_HOUR_H - 3);
+                const block    = document.createElement('div');
+                block.className   = 'wtg-event-block';
+                block.style.top   = topPx + 'px';
+                block.style.height= heightPx + 'px';
+                block.innerHTML   = `
+                    <div class="wtg-event-title">${esc(ev.title)}</div>
+                    <div class="wtg-event-sub">${time12h(ev.time)}${ev.place ? ' · ' + esc(ev.place) : ''}</div>
+                    <div class="wtg-resize-handle"></div>`;
+                block.addEventListener('mousedown', e => {
+                    if (e.target.closest('.wtg-resize-handle')) return;
+                    wtgStartDrag(e, block, 'move', ev.id, null, ds);
+                });
+                block.querySelector('.wtg-resize-handle').addEventListener('mousedown', e => {
+                    wtgStartDrag(e, block, 'resize', ev.id, null, ds);
+                });
                 col.appendChild(block);
             });
 
-            // Current-time indicator (amber line + dot)
+            // Task blocks (finer, gray) — timed dayTodos
+            (dayTodos[ds] || []).filter(t => !t.completed && t.time).forEach(todo => {
+                const [tdH, tdM] = todo.time.split(':').map(Number);
+                const topPx  = (tdH - WTG_HOUR_START) * WTG_HOUR_H + (tdM / 60) * WTG_HOUR_H;
+                if (topPx < 0 || topPx >= WTG_HOURS.length * WTG_HOUR_H) return;
+                const durMins  = todo.duration || 60;
+                const heightPx = Math.max(24, durMins / 60 * WTG_HOUR_H - 3);
+                const block    = document.createElement('div');
+                block.className   = 'wtg-task-block' + (todo.timeSensitive ? ' wtg-task-ts' : '');
+                block.style.top   = topPx + 'px';
+                block.style.height= heightPx + 'px';
+                const avClass = todo.assignee ? 'dt-av dt-av-' + todo.assignee.toLowerCase() : '';
+                const avHtml  = todo.assignee ? `<span class="${avClass}">${todo.assignee[0]}</span>` : '';
+                block.innerHTML   = `
+                    <div class="wtg-task-title">${esc(todo.text)}${avHtml}</div>
+                    <div class="wtg-resize-handle"></div>`;
+                block.addEventListener('mousedown', e => {
+                    if (e.target.closest('.wtg-resize-handle')) return;
+                    wtgStartDrag(e, block, 'move', null, todo.id, ds);
+                });
+                block.querySelector('.wtg-resize-handle').addEventListener('mousedown', e => {
+                    wtgStartDrag(e, block, 'resize', null, todo.id, ds);
+                });
+                col.appendChild(block);
+            });
+
+            // Current-time indicator
             if (isToday) {
-                const nowH   = now.getHours();
-                const nowM   = now.getMinutes();
+                const nowH = now.getHours(), nowM = now.getMinutes();
                 const nowTop = (nowH - WTG_HOUR_START) * WTG_HOUR_H + (nowM / 60) * WTG_HOUR_H;
                 if (nowTop >= 0 && nowTop <= WTG_HOURS.length * WTG_HOUR_H) {
                     const line = document.createElement('div');
@@ -348,17 +482,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             daysWrap.appendChild(col);
         });
+
         grid.appendChild(daysWrap);
         scrollWrap.appendChild(grid);
         container.appendChild(scrollWrap);
         weekStrip.appendChild(container);
 
-        // Auto-scroll to current hour (offset 1.5h above) or 8 AM
-        requestAnimationFrame(() => {
-            const targetH  = Math.max(WTG_HOUR_START, now.getHours() - 1);
-            const scrollTo = (targetH - WTG_HOUR_START) * WTG_HOUR_H;
-            scrollWrap.scrollTop = Math.max(0, scrollTo);
-        });
+        // Auto-scroll to current hour (1h above) — only first render, preserve scroll after drag
+        if (!_wtgDrag) {
+            requestAnimationFrame(() => {
+                const targetH = Math.max(WTG_HOUR_START, now.getHours() - 1);
+                scrollWrap.scrollTop = Math.max(0, (targetH - WTG_HOUR_START) * WTG_HOUR_H);
+            });
+        }
     }
 
     document.getElementById('prevWeekBtn')?.addEventListener('click', () => { weekOffset--; renderWeekView(); });
