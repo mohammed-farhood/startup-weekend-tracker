@@ -191,22 +191,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return (h24 - 12) + ' PM';
     }
 
-    function openEventModalPrefilled(ds, hour, mins) {
+    function openEventModalPrefilled(ds, hour, mins, durMins) {
         if (eventTitleInput) eventTitleInput.value = '';
         if (eventDateInput)  eventDateInput.value  = ds;
         if (eventTimeInput)  eventTimeInput.value  = String(hour % 24).padStart(2,'0') + ':' + String(mins).padStart(2,'0');
         if (eventPlaceInput) eventPlaceInput.value = '';
+        _pendingDuration = durMins || null;
         if (eventModal) eventModal.style.display = 'flex';
         setTimeout(() => { if (eventTitleInput) eventTitleInput.focus(); }, 50);
     }
 
     // ── Quick-create menu (Event | Task) ─────────────────────────────────────
-    function showWtgQuickMenu(ds, h, m, anchorEl) {
+    function showWtgQuickMenu(ds, h, m, clickX, clickY, durMins) {
         document.querySelectorAll('.wtg-quick-menu').forEach(el => el.remove());
+        const dur = durMins || 180;
         const menu = document.createElement('div');
         menu.className = 'wtg-quick-menu';
-        const rect = anchorEl.getBoundingClientRect();
-        menu.style.cssText = `position:fixed;top:${rect.top + rect.height / 2}px;left:${rect.left + rect.width / 2}px;`;
+        menu.style.cssText = `position:fixed;top:${clickY}px;left:${clickX}px;`;
         menu.innerHTML = `
             <button class="wtg-qm-btn wtg-qm-event">${icon('calendar','sm')} Event</button>
             <div class="wtg-qm-div"></div>
@@ -215,25 +216,93 @@ document.addEventListener('DOMContentLoaded', () => {
 
         menu.querySelector('.wtg-qm-event').addEventListener('click', e => {
             e.stopPropagation(); menu.remove();
-            openEventModalPrefilled(ds, h, m);
+            openEventModalPrefilled(ds, h, m, dur);
         });
 
         menu.querySelector('.wtg-qm-task').addEventListener('click', e => {
             e.stopPropagation();
             const timeStr = String(h % 24).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+            // Switch menu to expanded task card
+            menu.classList.add('wtg-task-card');
+            // Clamp to viewport after layout reflow
+            requestAnimationFrame(() => {
+                const r = menu.getBoundingClientRect();
+                if (r.right  > window.innerWidth  - 8) menu.style.left = (parseFloat(menu.style.left) - (r.right  - window.innerWidth  + 8)) + 'px';
+                if (r.bottom > window.innerHeight - 8) menu.style.top  = (parseFloat(menu.style.top)  - (r.bottom - window.innerHeight + 8)) + 'px';
+                if (r.left < 8) menu.style.left = (parseFloat(menu.style.left) + 8 - r.left) + 'px';
+                if (r.top  < 8) menu.style.top  = (parseFloat(menu.style.top)  + 8 - r.top)  + 'px';
+            });
+            let tcAssignee = null, tcTs = false, tcPrio = null;
             menu.innerHTML = `
-                <input class="wtg-qm-input" type="text" placeholder="Task name…">
-                <button class="wtg-qm-save">${icon('check','sm')}</button>`;
-            const inp = menu.querySelector('.wtg-qm-input');
+                <input class="wtg-tc-input" type="text" placeholder="Task name…" autocomplete="off">
+                <div class="wtg-tc-row">
+                    <span class="wtg-tc-label">Assign</span>
+                    <button class="wtg-tc-av av-m" data-u="Mohammed">M</button>
+                    <button class="wtg-tc-av av-e" data-u="Eyad">E</button>
+                    <button class="wtg-tc-av av-y" data-u="Yusuf">Y</button>
+                    <span style="margin-left:auto;font-size:0.65rem;color:var(--text-faint)">optional</span>
+                </div>
+                <div class="wtg-tc-row" style="padding-top:4px;">
+                    <button class="wtg-tc-ts-btn">${icon('timer','sm')} Time-sensitive</button>
+                </div>
+                <div class="wtg-tc-deadline-row">
+                    <input type="date" class="wtg-tc-date" placeholder="Deadline">
+                    <div class="wtg-tc-prio-row">
+                        <span class="task-prio-row-label" style="font-size:0.65rem;">Priority</span>
+                        <button class="task-prio-btn" data-p="red"    title="High"></button>
+                        <button class="task-prio-btn" data-p="yellow" title="Medium"></button>
+                        <button class="task-prio-btn" data-p="green"  title="Low"></button>
+                    </div>
+                </div>
+                <div class="wtg-tc-actions">
+                    <button class="wtg-tc-cancel">Cancel</button>
+                    <button class="wtg-qm-save" style="padding:5px 12px;">${icon('check','sm')}</button>
+                </div>`;
+
+            const inp = menu.querySelector('.wtg-tc-input');
             inp.focus();
+
+            // Assignee avatars
+            menu.querySelectorAll('.wtg-tc-av').forEach(btn => {
+                btn.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    const pick = btn.dataset.u;
+                    tcAssignee = (tcAssignee === pick) ? null : pick;
+                    menu.querySelectorAll('.wtg-tc-av').forEach(b => b.classList.remove('active'));
+                    if (tcAssignee) btn.classList.add('active');
+                });
+            });
+
+            // Time-sensitive toggle
+            menu.querySelector('.wtg-tc-ts-btn').addEventListener('click', ev => {
+                ev.stopPropagation();
+                tcTs = !tcTs;
+                menu.querySelector('.wtg-tc-ts-btn').classList.toggle('ts-on', tcTs);
+                menu.querySelector('.wtg-tc-deadline-row').classList.toggle('visible', tcTs);
+                if (!tcTs) tcPrio = null;
+            });
+
+            // Priority flags
+            menu.querySelectorAll('.task-prio-btn').forEach(btn => {
+                btn.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    tcPrio = (tcPrio === btn.dataset.p) ? null : btn.dataset.p;
+                    menu.querySelectorAll('.task-prio-btn').forEach(b => b.classList.toggle('active', b.dataset.p === tcPrio));
+                });
+            });
+
             const save = () => {
                 const text = inp.value.trim(); if (!text) { menu.remove(); return; }
+                const deadline = tcTs ? (menu.querySelector('.wtg-tc-date').value || null) : null;
                 if (!dayTodos[ds]) dayTodos[ds] = [];
-                dayTodos[ds].push({ id: uid(), text, completed: false, time: timeStr });
+                dayTodos[ds].push({ id: uid(), text, completed: false, time: timeStr, duration: dur,
+                    assignee: tcAssignee, timeSensitive: tcTs, deadline, priority: tcPrio });
                 saveDayTodos(); renderWeekView(); renderCalendar(); menu.remove();
             };
+
             inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') save(); if (ev.key === 'Escape') menu.remove(); });
             menu.querySelector('.wtg-qm-save').addEventListener('click', save);
+            menu.querySelector('.wtg-tc-cancel').addEventListener('click', () => menu.remove());
         });
 
         setTimeout(() => {
@@ -243,68 +312,360 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 0);
     }
 
-    // ── Drag + resize state (persists across renders) ─────────────────────────
+    // ── Drag + resize + draw state ───────────────────────────────────────────
     let _wtgDrag = null;
+    let _wtgDraw = null;         // draw-to-create: click-drag to define a time range
+    let _pendingDuration = null; // duration set by draw, consumed by saveNewEvent
+    let _editingEventId  = null; // set when event modal is in edit (not create) mode
+    let _touchJustHandled = false; // suppresses synthetic mouse events after touch
+
+    // Shared pixel ↔ time helpers
+    function wtgPxToAbsMins(px) {
+        return (WTG_HOUR_START * 60) + Math.round(px / WTG_HOUR_H * 60 / WTG_SNAP) * WTG_SNAP;
+    }
+    function wtgPxToTimeStr(px) {
+        const abs = wtgPxToAbsMins(px);
+        return String(Math.floor(abs / 60) % 24).padStart(2,'0') + ':' + String(abs % 60).padStart(2,'0');
+    }
+    function wtgPxToDuration(px) {
+        return Math.max(WTG_SNAP, Math.round(px / WTG_HOUR_H * 60 / WTG_SNAP) * WTG_SNAP);
+    }
+    function wtgMinsLabel(absMins) {
+        const h = Math.floor(absMins / 60) % 24;
+        const m = absMins % 60;
+        const period = h < 12 ? 'AM' : 'PM';
+        const h12 = h % 12 || 12;
+        return m === 0 ? `${h12} ${period}` : `${h12}:${String(m).padStart(2,'0')} ${period}`;
+    }
 
     document.addEventListener('mousemove', e => {
-        if (!_wtgDrag) return;
-        const dy      = e.clientY - _wtgDrag.startY;
-        const snapPx  = WTG_SNAP / 60 * WTG_HOUR_H;
-        const snapped = Math.round(dy / snapPx) * snapPx;
-        if (_wtgDrag.type === 'move') {
-            const maxTop = (WTG_HOUR_END - WTG_HOUR_START) * WTG_HOUR_H - _wtgDrag.block.offsetHeight;
-            _wtgDrag.block.style.top = Math.max(0, Math.min(_wtgDrag.origTop + snapped, maxTop)) + 'px';
-        } else {
-            _wtgDrag.block.style.height = Math.max(snapPx, _wtgDrag.origH + snapped) + 'px';
+        // ── Move/resize existing blocks ──────────────────────────────────────
+        if (_wtgDrag) {
+            const dy      = e.clientY - _wtgDrag.startY;
+            if (Math.abs(dy) > 6) _wtgDrag.moved = true; // mark as real drag
+            const snapPx  = WTG_SNAP / 60 * WTG_HOUR_H;
+            const snapped = Math.round(dy / snapPx) * snapPx;
+            if (_wtgDrag.type === 'move') {
+                const maxTop = (WTG_HOUR_END - WTG_HOUR_START) * WTG_HOUR_H - _wtgDrag.block.offsetHeight;
+                _wtgDrag.block.style.top = Math.max(0, Math.min(_wtgDrag.origTop + snapped, maxTop)) + 'px';
+            } else {
+                _wtgDrag.block.style.height = Math.max(snapPx, _wtgDrag.origH + snapped) + 'px';
+            }
+            return;
         }
+        // ── Draw-to-create: extend ghost ─────────────────────────────────────
+        if (!_wtgDraw) return;
+        if (!_wtgDraw.ghost) {
+            // Commit draw only after intentional vertical movement
+            if (Math.abs(e.clientY - _wtgDraw.startClientY) < 8) return;
+            wtgCommitDraw(_wtgDraw.col, e.clientY);
+        }
+        if (!_wtgDraw) return;
+        const snapPx = WTG_SNAP / 60 * WTG_HOUR_H;
+        const rawPx  = e.clientY - _wtgDraw.col.getBoundingClientRect().top;
+        _wtgDraw.endPx = Math.max(snapPx, Math.round(rawPx / snapPx) * snapPx);
+        wtgUpdateDrawGhost();
     });
 
     document.addEventListener('mouseup', e => {
+        // ── Finish draw-to-create ─────────────────────────────────────────────
+        if (_wtgDraw) { wtgFinishDraw(e.clientX, e.clientY); return; }
+        // ── Finish move/resize ────────────────────────────────────────────────
         if (!_wtgDrag) return;
-        const { type, evId, todoId, block, startY, origTop, origH, ds } = _wtgDrag;
+        const { type, evId, todoId, block, startY, origTop, origH, ds, moved } = _wtgDrag;
         block.classList.remove('wtg-dragging');
         document.body.style.userSelect = '';
         document.body.style.cursor     = '';
+
+        // Tap (no real drag) → open edit panel, restore block, skip saving
+        if (!moved) {
+            block.style.top    = origTop + 'px';
+            block.style.height = origH   + 'px';
+            _wtgDrag = null;
+            if (evId) {
+                const ev = events.find(x => x.id === evId);
+                if (ev) showWtgEventPopover(ev, e.clientX, e.clientY);
+            } else if (todoId) {
+                const todo = (dayTodos[ds] || []).find(x => x.id === todoId);
+                if (todo) showWtgTaskEditCard(todo, ds, e.clientX, e.clientY);
+            }
+            return;
+        }
 
         const dy      = e.clientY - startY;
         const snapPx  = WTG_SNAP / 60 * WTG_HOUR_H;
         const snapped = Math.round(dy / snapPx) * snapPx;
 
-        function pxToTimeStr(px) {
-            const totalMins = Math.round(px / WTG_HOUR_H * 60 / WTG_SNAP) * WTG_SNAP;
-            const absH = WTG_HOUR_START * 60 + totalMins;
-            return String(Math.floor(absH / 60) % 24).padStart(2,'0') + ':' + String(absH % 60).padStart(2,'0');
-        }
-        function pxToDuration(px) {
-            return Math.max(WTG_SNAP, Math.round(px / WTG_HOUR_H * 60 / WTG_SNAP) * WTG_SNAP);
-        }
-
         if (evId) {
             const ev = events.find(x => x.id === evId);
             if (ev) {
-                if (type === 'move') ev.time = pxToTimeStr(Math.max(0, origTop + snapped));
-                else ev.duration = pxToDuration(Math.max(snapPx, origH + snapped));
+                if (type === 'move') ev.time = wtgPxToTimeStr(Math.max(0, origTop + snapped));
+                else ev.duration = wtgPxToDuration(Math.max(snapPx, origH + snapped));
                 saveEvents(); renderWeekView();
             }
         }
         if (todoId) {
             const todo = (dayTodos[ds] || []).find(x => x.id === todoId);
             if (todo) {
-                if (type === 'move') todo.time = pxToTimeStr(Math.max(0, origTop + snapped));
-                else todo.duration = pxToDuration(Math.max(snapPx, origH + snapped));
+                if (type === 'move') todo.time = wtgPxToTimeStr(Math.max(0, origTop + snapped));
+                else todo.duration = wtgPxToDuration(Math.max(snapPx, origH + snapped));
                 saveDayTodos(); renderWeekView();
             }
         }
         _wtgDrag = null;
     });
 
+    // Touch move — detect direction, extend ghost, prevent scroll while drawing
+    document.addEventListener('touchmove', e => {
+        if (!_wtgDraw) return;
+        const t = e.touches[0];
+        if (!_wtgDraw.ghost) {
+            const dx = Math.abs(t.clientX - _wtgDraw.startClientX);
+            const dy = Math.abs(t.clientY - _wtgDraw.startClientY);
+            if (dy < 8 && dx < 8) return;
+            if (dx > dy) { _wtgDraw = null; return; } // horizontal → let container scroll
+            wtgCommitDraw(_wtgDraw.col, _wtgDraw.startClientY);
+        }
+        if (!_wtgDraw) return;
+        e.preventDefault(); // block scroll now that draw is committed
+        const snapPx = WTG_SNAP / 60 * WTG_HOUR_H;
+        const rawPx  = t.clientY - _wtgDraw.col.getBoundingClientRect().top;
+        _wtgDraw.endPx = Math.max(snapPx, Math.round(rawPx / snapPx) * snapPx);
+        wtgUpdateDrawGhost();
+    }, { passive: false });
+
+    document.addEventListener('touchend', e => {
+        if (!_wtgDraw) return;
+        _touchJustHandled = true;
+        setTimeout(() => { _touchJustHandled = false; }, 600); // block synthetic mouse events
+        const t = e.changedTouches[0];
+        wtgFinishDraw(t ? t.clientX : _wtgDraw.startClientX, t ? t.clientY : _wtgDraw.startClientY);
+    });
+    document.addEventListener('touchcancel', () => {
+        if (_wtgDraw?.ghost) _wtgDraw.ghost.remove();
+        _wtgDraw = null;
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+    });
+
+    // ── Draw-to-create: commit & update ──────────────────────────────────────
+    function wtgCommitDraw(col, anchorClientY) {
+        if (!_wtgDraw || _wtgDraw.ghost) return;
+        const snapPx  = WTG_SNAP / 60 * WTG_HOUR_H;
+        const rawPx   = anchorClientY - col.getBoundingClientRect().top;
+        const startPx = Math.max(0, Math.round(rawPx / snapPx) * snapPx);
+        const ghost   = document.createElement('div');
+        ghost.className = 'wtg-draw-ghost';
+        const timeLabel = document.createElement('div');
+        timeLabel.className = 'wtg-draw-time-label';
+        ghost.appendChild(timeLabel);
+        col.appendChild(ghost);
+        _wtgDraw.startPx  = startPx;
+        _wtgDraw.endPx    = startPx + snapPx;
+        _wtgDraw.ghost    = ghost;
+        _wtgDraw.timeLabel = timeLabel;
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'ns-resize';
+        wtgUpdateDrawGhost();
+    }
+    function wtgUpdateDrawGhost() {
+        if (!_wtgDraw?.ghost) return;
+        const { ghost, timeLabel, startPx, endPx } = _wtgDraw;
+        const snapPx = WTG_SNAP / 60 * WTG_HOUR_H;
+        const top    = Math.min(startPx, endPx);
+        const h      = Math.max(snapPx, Math.abs(endPx - startPx));
+        ghost.style.top    = top + 'px';
+        ghost.style.height = h + 'px';
+        const s = wtgPxToAbsMins(top);
+        const en = wtgPxToAbsMins(top + h);
+        if (timeLabel) timeLabel.textContent = `${wtgMinsLabel(s)} – ${wtgMinsLabel(en)}`;
+    }
+    function wtgFinishDraw(clientX, clientY) {
+        if (!_wtgDraw) return;
+        const { col, ds, ghost, startClientX, startClientY } = _wtgDraw;
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+
+        // Pure tap — no ghost was drawn
+        if (!ghost) {
+            _wtgDraw = null;
+            const rawPx  = startClientY - col.getBoundingClientRect().top;
+            const snapPx = WTG_SNAP / 60 * WTG_HOUR_H;
+            const startPx = Math.max(0, Math.round(rawPx / snapPx) * snapPx);
+            const startAbsMins = wtgPxToAbsMins(startPx);
+            showWtgQuickMenu(ds, Math.floor(startAbsMins / 60) % 24, startAbsMins % 60,
+                clientX, clientY, 180);
+            return;
+        }
+
+        // Draw completed — read final ghost geometry
+        const top = parseFloat(ghost.style.top);
+        const h   = parseFloat(ghost.style.height);
+        ghost.remove();
+        _wtgDraw = null;
+
+        const startAbsMins = wtgPxToAbsMins(top);
+        let   durMins      = wtgPxToAbsMins(top + h) - startAbsMins;
+        if (durMins < WTG_SNAP) durMins = 180; // safety: fallback to 3h
+
+        const startH = Math.floor(startAbsMins / 60) % 24;
+        const startM = startAbsMins % 60;
+
+        // Menu appears at the release point, clamped to viewport
+        const menuX = Math.min(clientX, window.innerWidth - 20);
+        const menuY = Math.min(Math.max(clientY, 60), window.innerHeight - 60);
+        showWtgQuickMenu(ds, startH, startM, menuX, menuY, durMins);
+    }
+
     function wtgStartDrag(e, block, type, evId, todoId, ds) {
         e.preventDefault(); e.stopPropagation();
         _wtgDrag = { type, evId, todoId, block, ds, startY: e.clientY,
-            origTop: parseFloat(block.style.top) || 0, origH: block.offsetHeight };
+            origTop: parseFloat(block.style.top) || 0, origH: block.offsetHeight,
+            moved: false };
         block.classList.add('wtg-dragging');
         document.body.style.userSelect = 'none';
         document.body.style.cursor = type === 'resize' ? 'ns-resize' : 'grabbing';
+    }
+
+    // ── WTG block edit: event popover ────────────────────────────────────────
+    function showWtgEventPopover(ev, clientX, clientY) {
+        document.querySelectorAll('.wtg-block-pop,.wtg-quick-menu').forEach(el => el.remove());
+        const pop = document.createElement('div');
+        pop.className = 'wtg-block-pop';
+        pop.style.cssText = `position:fixed;top:${clientY}px;left:${clientX}px;`;
+        pop.innerHTML = `
+            <div class="wtg-bp-name">${esc(ev.title)}</div>
+            ${ev.time ? `<div class="wtg-bp-meta">${icon('timer','sm')} ${time12h(ev.time)}${ev.place ? ' &middot; ' + esc(ev.place) : ''}</div>` : ''}
+            <div class="wtg-bp-actions">
+                <button class="wtg-bp-del">${icon('trash','sm')} Delete</button>
+                <button class="wtg-bp-edit">${icon('edit','sm')} Edit</button>
+            </div>`;
+        document.body.appendChild(pop);
+        requestAnimationFrame(() => {
+            const r = pop.getBoundingClientRect();
+            if (r.right  > window.innerWidth  - 8) pop.style.left = (clientX - r.width  - 6) + 'px';
+            if (r.bottom > window.innerHeight - 8) pop.style.top  = (clientY - r.height - 6) + 'px';
+        });
+        pop.querySelector('.wtg-bp-edit').addEventListener('click', e => {
+            e.stopPropagation(); pop.remove(); openEventEdit(ev);
+        });
+        pop.querySelector('.wtg-bp-del').addEventListener('click', e => {
+            e.stopPropagation();
+            events = events.filter(x => x.id !== ev.id);
+            saveEvents(); renderWeekView(); renderCalendar(); pop.remove();
+        });
+        setTimeout(() => {
+            document.addEventListener('click', function _c(e) {
+                if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', _c); }
+            });
+        }, 0);
+    }
+
+    function openEventEdit(ev) {
+        _editingEventId = ev.id;
+        _pendingDuration = ev.duration || null;
+        if (eventTitleInput) eventTitleInput.value = ev.title;
+        if (eventDateInput)  eventDateInput.value  = ev.date;
+        if (eventTimeInput)  eventTimeInput.value  = ev.time || '';
+        if (eventPlaceInput) eventPlaceInput.value = ev.place || '';
+        if (eventModal) eventModal.style.display = 'flex';
+        setTimeout(() => { if (eventTitleInput) eventTitleInput.focus(); }, 50);
+    }
+
+    // ── WTG block edit: task card (pre-filled) ────────────────────────────────
+    function showWtgTaskEditCard(todo, ds, clientX, clientY) {
+        document.querySelectorAll('.wtg-quick-menu,.wtg-block-pop').forEach(el => el.remove());
+        const menu = document.createElement('div');
+        menu.className = 'wtg-quick-menu wtg-task-card';
+        menu.style.cssText = `position:fixed;top:${clientY}px;left:${clientX}px;`;
+
+        let tcAssignee = todo.assignee || null;
+        let tcTs       = !!todo.timeSensitive;
+        let tcPrio     = todo.priority || null;
+
+        const avActive = u => (tcAssignee === u ? 'active' : '');
+        menu.innerHTML = `
+            <input class="wtg-tc-input" type="text" value="${esc(todo.text)}" autocomplete="off">
+            <div class="wtg-tc-row">
+                <span class="wtg-tc-label">Assign</span>
+                <button class="wtg-tc-av av-m ${avActive('Mohammed')}" data-u="Mohammed">M</button>
+                <button class="wtg-tc-av av-e ${avActive('Eyad')}"     data-u="Eyad">E</button>
+                <button class="wtg-tc-av av-y ${avActive('Yusuf')}"    data-u="Yusuf">Y</button>
+            </div>
+            <div class="wtg-tc-row" style="padding-top:4px;">
+                <button class="wtg-tc-ts-btn ${tcTs?'ts-on':''}">${icon('timer','sm')} Time-sensitive</button>
+            </div>
+            <div class="wtg-tc-deadline-row ${tcTs?'visible':''}">
+                <input type="date" class="wtg-tc-date" value="${todo.deadline||''}">
+                <div class="wtg-tc-prio-row">
+                    <span class="task-prio-row-label" style="font-size:0.65rem;">Priority</span>
+                    <button class="task-prio-btn ${tcPrio==='red'?'active':''}"    data-p="red"    title="High"></button>
+                    <button class="task-prio-btn ${tcPrio==='yellow'?'active':''}" data-p="yellow" title="Medium"></button>
+                    <button class="task-prio-btn ${tcPrio==='green'?'active':''}"  data-p="green"  title="Low"></button>
+                </div>
+            </div>
+            <div class="wtg-tc-actions">
+                <button class="wtg-tc-del-btn">${icon('trash','sm')}</button>
+                <button class="wtg-tc-cancel">Cancel</button>
+                <button class="wtg-qm-save" style="padding:5px 14px;">${icon('check','sm')} Save</button>
+            </div>`;
+
+        document.body.appendChild(menu);
+        requestAnimationFrame(() => {
+            const r = menu.getBoundingClientRect();
+            if (r.right  > window.innerWidth  - 8) menu.style.left = (clientX - r.width  - 6) + 'px';
+            if (r.bottom > window.innerHeight - 8) menu.style.top  = (clientY - r.height - 6) + 'px';
+            if (r.left < 8) menu.style.left = '8px';
+            if (r.top  < 8) menu.style.top  = '8px';
+        });
+
+        const inp = menu.querySelector('.wtg-tc-input');
+        inp.focus(); inp.select();
+
+        menu.querySelectorAll('.wtg-tc-av').forEach(btn => {
+            btn.addEventListener('click', ev => {
+                ev.stopPropagation();
+                tcAssignee = (tcAssignee === btn.dataset.u) ? null : btn.dataset.u;
+                menu.querySelectorAll('.wtg-tc-av').forEach(b => b.classList.remove('active'));
+                if (tcAssignee) btn.classList.add('active');
+            });
+        });
+        menu.querySelector('.wtg-tc-ts-btn').addEventListener('click', ev => {
+            ev.stopPropagation();
+            tcTs = !tcTs;
+            menu.querySelector('.wtg-tc-ts-btn').classList.toggle('ts-on', tcTs);
+            menu.querySelector('.wtg-tc-deadline-row').classList.toggle('visible', tcTs);
+            if (!tcTs) tcPrio = null;
+        });
+        menu.querySelectorAll('.task-prio-btn').forEach(btn => {
+            btn.addEventListener('click', ev => {
+                ev.stopPropagation();
+                tcPrio = (tcPrio === btn.dataset.p) ? null : btn.dataset.p;
+                menu.querySelectorAll('.task-prio-btn').forEach(b => b.classList.toggle('active', b.dataset.p === tcPrio));
+            });
+        });
+        menu.querySelector('.wtg-tc-del-btn').addEventListener('click', ev => {
+            ev.stopPropagation();
+            dayTodos[ds] = (dayTodos[ds] || []).filter(t => t.id !== todo.id);
+            saveDayTodos(); renderWeekView(); renderCalendar(); menu.remove();
+        });
+        const save = () => {
+            const text = inp.value.trim(); if (!text) { menu.remove(); return; }
+            todo.text = text;
+            todo.assignee = tcAssignee;
+            todo.timeSensitive = tcTs;
+            todo.deadline = tcTs ? (menu.querySelector('.wtg-tc-date').value || null) : null;
+            todo.priority = tcPrio;
+            saveDayTodos(); renderWeekView(); renderCalendar(); menu.remove();
+        };
+        inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') save(); if (ev.key === 'Escape') menu.remove(); });
+        menu.querySelector('.wtg-qm-save').addEventListener('click', save);
+        menu.querySelector('.wtg-tc-cancel').addEventListener('click', () => menu.remove());
+        setTimeout(() => {
+            document.addEventListener('click', function _c(e) {
+                if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', _c); }
+            });
+        }, 0);
     }
 
     function renderWeekView() {
@@ -407,14 +768,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 const row = document.createElement('div');
                 row.className = 'wtg-hour-row' + (WTG_3H.has(h) ? ' wtg-row-3h' : '');
                 row.innerHTML = '<div class="wtg-half-line"></div>';
-                row.addEventListener('click', ev => {
-                    if (ev.target.closest('.wtg-event-block,.wtg-task-block,.wtg-quick-menu')) return;
-                    const rect = row.getBoundingClientRect();
-                    const m = (ev.clientY - rect.top) < WTG_HOUR_H / 2 ? 0 : 30;
-                    showWtgQuickMenu(ds, h, m, row);
-                });
                 col.appendChild(row);
             });
+
+            // Draw-to-create: mousedown / touchstart on the empty column space
+            col.addEventListener('mousedown', e => {
+                if (e.button !== 0) return;
+                if (_touchJustHandled) return; // ignore synthetic mouse events after touch
+                if (e.target.closest('.wtg-event-block,.wtg-task-block,.wtg-resize-handle,.wtg-quick-menu,.wtg-draw-ghost')) return;
+                e.preventDefault();
+                _wtgDraw = { col, ds, startClientX: e.clientX, startClientY: e.clientY, ghost: null };
+            });
+            col.addEventListener('touchstart', e => {
+                if (e.target.closest('.wtg-event-block,.wtg-task-block,.wtg-resize-handle,.wtg-quick-menu,.wtg-draw-ghost')) return;
+                const t = e.touches[0];
+                _wtgDraw = { col, ds, startClientX: t.clientX, startClientY: t.clientY, ghost: null };
+            }, { passive: true });
 
             // Event blocks (bold, amber) — draggable + resizable
             events.filter(ev => ev.date === ds && ev.time).forEach(ev => {
@@ -441,7 +810,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 col.appendChild(block);
             });
 
-            // Task blocks (finer, gray) — timed dayTodos
+            // Task blocks — timed dayTodos, colored by priority
+            const PRIO_COLOR = { red: '#E11D48', yellow: '#D97706', green: '#16A34A' };
             (dayTodos[ds] || []).filter(t => !t.completed && t.time).forEach(todo => {
                 const [tdH, tdM] = todo.time.split(':').map(Number);
                 const topPx  = (tdH - WTG_HOUR_START) * WTG_HOUR_H + (tdM / 60) * WTG_HOUR_H;
@@ -449,13 +819,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const durMins  = todo.duration || 60;
                 const heightPx = Math.max(24, durMins / 60 * WTG_HOUR_H - 3);
                 const block    = document.createElement('div');
+                const prioClr  = todo.priority ? PRIO_COLOR[todo.priority] : null;
                 block.className   = 'wtg-task-block' + (todo.timeSensitive ? ' wtg-task-ts' : '');
                 block.style.top   = topPx + 'px';
                 block.style.height= heightPx + 'px';
+                if (prioClr) {
+                    block.style.borderLeftColor = prioClr;
+                    block.style.background = prioClr.replace(')', ',0.08)').replace('rgb', 'rgba').replace('#E11D48','rgba(225,29,72,0.08)').replace('#D97706','rgba(217,119,6,0.08)').replace('#16A34A','rgba(22,101,52,0.08)');
+                }
                 const avClass = todo.assignee ? 'dt-av dt-av-' + todo.assignee.toLowerCase() : '';
                 const avHtml  = todo.assignee ? `<span class="${avClass}">${todo.assignee[0]}</span>` : '';
+                const dlHtml  = (todo.timeSensitive && todo.deadline) ? `<span style="font-size:9px;opacity:0.8">${deadlineChip(todo.deadline)}</span>` : '';
                 block.innerHTML   = `
                     <div class="wtg-task-title">${esc(todo.text)}${avHtml}</div>
+                    ${dlHtml}
                     <div class="wtg-resize-handle"></div>`;
                 block.addEventListener('mousedown', e => {
                     if (e.target.closest('.wtg-resize-handle')) return;
@@ -488,11 +865,18 @@ document.addEventListener('DOMContentLoaded', () => {
         container.appendChild(scrollWrap);
         weekStrip.appendChild(container);
 
-        // Auto-scroll to current hour (1h above) — only first render, preserve scroll after drag
-        if (!_wtgDrag) {
+        // Auto-scroll to current hour; on mobile also scroll today into view horizontally
+        if (!_wtgDrag && !_wtgDraw) {
             requestAnimationFrame(() => {
-                const targetH = Math.max(WTG_HOUR_START, now.getHours() - 1);
-                scrollWrap.scrollTop = Math.max(0, (targetH - WTG_HOUR_START) * WTG_HOUR_H);
+                const targetH  = Math.max(WTG_HOUR_START, now.getHours() - 1);
+                const scrollPx = Math.max(0, (targetH - WTG_HOUR_START) * WTG_HOUR_H);
+                if (window.innerWidth <= 700) {
+                    container.scrollTop = scrollPx;
+                    const todayIdx = days.findIndex(d => d.getTime() === today.getTime());
+                    if (todayIdx >= 0) container.scrollLeft = Math.max(0, 36 + todayIdx * 128 - 20);
+                } else {
+                    scrollWrap.scrollTop = scrollPx;
+                }
             });
         }
     }
@@ -668,6 +1052,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const eventTimeInput  = document.getElementById('eventTime');
     const eventDateInput  = document.getElementById('eventDate');
 
+    // ── Deadline countdown chip helper ────────────────────────────────────────
+    function deadlineChip(deadline) {
+        if (!deadline) return '';
+        const today = new Date(); today.setHours(0,0,0,0);
+        const due   = new Date(deadline + 'T00:00:00');
+        const diff  = Math.round((due - today) / 86400000);
+        let cls, label;
+        if      (diff < 0)   { cls = 'dl-overdue'; label = 'overdue'; }
+        else if (diff === 0) { cls = 'dl-overdue'; label = 'today'; }
+        else if (diff <= 3)  { cls = 'dl-soon';    label = diff + 'd'; }
+        else if (diff <= 14) { cls = 'dl-soon';    label = diff + 'd'; }
+        else if (diff <= 60) { cls = 'dl-ok';      label = Math.round(diff / 7) + 'w'; }
+        else                 { cls = 'dl-ok';       label = Math.round(diff / 30) + 'mo'; }
+        return `<span class="task-deadline-chip ${cls}">${label}</span>`;
+    }
+    function prioDot(priority) {
+        return priority ? `<span class="task-prio-dot prio-${priority}"></span>` : '';
+    }
+
     document.getElementById('addEventBtn')?.addEventListener('click', () => {
         eventTitleInput.value = ''; eventDateInput.value = '';
         if (eventPlaceInput) eventPlaceInput.value = '';
@@ -678,6 +1081,8 @@ document.addEventListener('DOMContentLoaded', () => {
         eventModal.style.display = 'none';
         if (eventPlaceInput) eventPlaceInput.value = '';
         if (eventTimeInput)  eventTimeInput.value  = '';
+        _pendingDuration = null;
+        _editingEventId  = null;
     });
     document.getElementById('saveEventBtn')?.addEventListener('click', saveNewEvent);
     eventDateInput?.addEventListener('keydown', e => { if (e.key === 'Enter') saveNewEvent(); });
@@ -694,8 +1099,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const title = eventTitleInput.value.trim();
         const date  = eventDateInput.value;
         if (!title || !date) return;
-        events.push({ id: uid(), title, date, place: (eventPlaceInput?.value.trim() || null), time: (eventTimeInput?.value || null) });
-        saveEvents(); renderAll();
+        if (_editingEventId) {
+            const ev = events.find(e => e.id === _editingEventId);
+            if (ev) {
+                ev.title = title; ev.date = date;
+                ev.place = eventPlaceInput?.value.trim() || null;
+                ev.time  = eventTimeInput?.value || null;
+                if (_pendingDuration) ev.duration = _pendingDuration;
+            }
+            _editingEventId = null; _pendingDuration = null;
+            saveEvents(); renderAll();
+        } else {
+            const ev = { id: uid(), title, date,
+                place: (eventPlaceInput?.value.trim() || null),
+                time:  (eventTimeInput?.value || null) };
+            if (_pendingDuration) { ev.duration = _pendingDuration; _pendingDuration = null; }
+            events.push(ev);
+            saveEvents(); renderAll();
+        }
         if (eventPlaceInput) eventPlaceInput.value = '';
         if (eventTimeInput)  eventTimeInput.value  = '';
         eventModal.style.display = 'none';
@@ -728,9 +1149,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const li = document.createElement('li');
             li.className = 'todo-item managed' + (task.completed ? ' completed' : '');
             li.dataset.id = task.id;
+            const dlChip  = (task.timeSensitive && task.deadline) ? deadlineChip(task.deadline) : '';
+            const tsIcon  = (task.timeSensitive && !task.deadline) ? `<span class="dt-ts-chip">${icon('timer','sm')}</span>` : '';
+            const assigneeTag = task.assignee
+                ? `<span class="assignee ${assigneeClass}">${esc(task.assignee)}</span>` : '';
             li.innerHTML = `
                 <div class="todo-main">
                     <div class="todo-left">
+                        ${prioDot(task.priority)}
                         <button class="subtask-toggle" title="Subtasks">${icon('chevronRight', 'sm')}</button>
                         <label class="todo-label">
                             <input type="checkbox" class="todo-checkbox" ${task.completed ? 'checked' : ''}>
@@ -740,8 +1166,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${totalSubs > 0 ? `<span class="subtask-count">${completedSubs}/${totalSubs}</span>` : ''}
                     </div>
                     <div class="todo-right">
+                        ${dlChip}${tsIcon}
                         ${tagHtml}
-                        <span class="assignee ${assigneeClass}">${esc(task.assignee)}</span>
+                        ${assigneeTag}
                         <button class="task-action-btn task-edit-btn" title="Edit">${icon('edit', 'sm')}</button>
                         <button class="task-action-btn task-delete-btn" title="Delete">${icon('trash', 'sm')}</button>
                     </div>
@@ -823,12 +1250,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const taskProjectSelect  = document.getElementById('taskProjectSelect');
     const taskEditIdInput    = document.getElementById('taskEditId');
 
+    // Task modal ts state
+    let _taskModalTs = false;
+    let _taskModalPrio = null;
+
+    function taskModalSetTs(on) {
+        _taskModalTs = on;
+        const btn    = document.getElementById('taskTsBtn');
+        const fields = document.getElementById('taskTsFields');
+        if (btn)    btn.classList.toggle('ts-on', on);
+        if (fields) fields.classList.toggle('visible', on);
+    }
+    function taskModalSetPrio(p) {
+        _taskModalPrio = p;
+        document.querySelectorAll('#taskTsFields .task-prio-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.p === p);
+        });
+    }
+
+    document.getElementById('taskTsBtn')?.addEventListener('click', () => taskModalSetTs(!_taskModalTs));
+    document.querySelectorAll('#taskTsFields .task-prio-btn').forEach(b => {
+        b.addEventListener('click', () => taskModalSetPrio(_taskModalPrio === b.dataset.p ? null : b.dataset.p));
+    });
+
     function openTaskModal(task = null) {
         taskModalTitle.textContent  = task ? 'Edit Task' : 'Add Task';
         taskTextInput.value         = task ? task.text    : '';
-        taskAssigneeSelect.value    = task ? task.assignee : 'Mohammed';
+        taskAssigneeSelect.value    = task ? (task.assignee || '') : '';
         if (taskProjectSelect) taskProjectSelect.value = task ? (task.projectId || 'none') : 'none';
         taskEditIdInput.value       = task ? task.id : '';
+        // ts / deadline / priority
+        taskModalSetTs(task ? !!task.timeSensitive : false);
+        taskModalSetPrio(task ? (task.priority || null) : null);
+        const dlInput = document.getElementById('taskDeadlineInput');
+        if (dlInput) dlInput.value = (task && task.deadline) ? task.deadline : '';
         taskModal.style.display = 'flex';
         setTimeout(() => taskTextInput.focus(), 50);
     }
@@ -837,15 +1292,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('cancelTaskBtn')?.addEventListener('click', () => { taskModal.style.display = 'none'; });
     document.getElementById('saveTaskBtn')?.addEventListener('click', () => {
         const text      = taskTextInput.value.trim();
-        const assignee  = taskAssigneeSelect.value;
+        const assignee  = taskAssigneeSelect.value || null;
         const projectId = taskProjectSelect ? taskProjectSelect.value : 'none';
         const editId    = taskEditIdInput.value;
+        const deadline  = _taskModalTs ? (document.getElementById('taskDeadlineInput')?.value || null) : null;
         if (!text) return;
         if (editId) {
             const t = tasks.find(t => t.id == editId);
-            if (t) { t.text = text; t.assignee = assignee; t.projectId = projectId; }
+            if (t) { t.text = text; t.assignee = assignee; t.projectId = projectId;
+                     t.timeSensitive = _taskModalTs; t.deadline = deadline; t.priority = _taskModalPrio; }
         } else {
-            tasks.push({ id: uid(), text, assignee, projectId, completed: false, subtasks: [] });
+            tasks.push({ id: uid(), text, assignee, projectId, completed: false, subtasks: [],
+                         timeSensitive: _taskModalTs, deadline, priority: _taskModalPrio });
         }
         saveTasks(); renderTasks();
         taskModal.style.display = 'none';
@@ -952,8 +1410,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const proj = todo.projectId ? projects.find(p => p.id == todo.projectId) : null;
             const assigneeLow = (todo.assignee || '').toLowerCase();
             const assigneeInit = todo.assignee ? todo.assignee[0] : '';
-            const extraHtml = (proj ? `<span class="dt-proj-chip" style="background:${proj.color}22;color:${proj.color}">${esc(proj.name)}</span>` : '')
-                + (todo.timeSensitive ? `<span class="dt-ts-chip">${icon('timer','sm')}</span>` : '')
+            const dlChipDay = (todo.timeSensitive && todo.deadline) ? deadlineChip(todo.deadline) : '';
+            const tsIconDay  = (todo.timeSensitive && !todo.deadline) ? `<span class="dt-ts-chip">${icon('timer','sm')}</span>` : '';
+            const extraHtml = prioDot(todo.priority)
+                + (proj ? `<span class="dt-proj-chip" style="background:${proj.color}22;color:${proj.color}">${esc(proj.name)}</span>` : '')
+                + dlChipDay + tsIconDay
                 + (todo.assignee ? `<span class="dt-av dt-av-${assigneeLow}" title="${esc(todo.assignee)}">${assigneeInit}</span>` : '');
             li.innerHTML = `
                 <label class="todo-label">
@@ -1005,9 +1466,20 @@ document.addEventListener('DOMContentLoaded', () => {
         dayTodoAddRow.style.display = isShowing ? 'none' : 'flex';
         if (!isShowing) dayTodoInput.focus();
     });
+    let _dayTodoPrio = null;
     document.getElementById('dayTodoTsBtn')?.addEventListener('click', function() {
         dayTodoTs = !dayTodoTs;
         this.classList.toggle('ts-on', dayTodoTs);
+        const prioRow = document.getElementById('dayTodoPrioRow');
+        if (prioRow) prioRow.classList.toggle('visible', dayTodoTs);
+        if (!dayTodoTs) _dayTodoPrio = null;
+    });
+    document.querySelectorAll('#dayTodoPrioRow .task-prio-btn').forEach(b => {
+        b.addEventListener('click', () => {
+            _dayTodoPrio = (_dayTodoPrio === b.dataset.p) ? null : b.dataset.p;
+            document.querySelectorAll('#dayTodoPrioRow .task-prio-btn').forEach(x =>
+                x.classList.toggle('active', x.dataset.p === _dayTodoPrio));
+        });
     });
     document.getElementById('saveDayTodoBtn')?.addEventListener('click', () => {
         const text = dayTodoInput.value.trim();
@@ -1017,14 +1489,19 @@ document.addEventListener('DOMContentLoaded', () => {
             id: uid(), text, completed: false,
             projectId: document.getElementById('dayTodoProject')?.value || null,
             timeSensitive: dayTodoTs,
-            assignee: document.getElementById('dayTodoAssignee')?.value || null
+            deadline:  dayTodoTs ? (document.getElementById('dayTodoDeadline')?.value || null) : null,
+            priority:  dayTodoTs ? _dayTodoPrio : null,
+            assignee:  document.getElementById('dayTodoAssignee')?.value || null
         });
         saveDayTodos(); renderAll();
         dayTodoInput.value = '';
         // Reset meta fields
-        dayTodoTs = false;
+        dayTodoTs = false; _dayTodoPrio = null;
         const tsBtn = document.getElementById('dayTodoTsBtn');
         if (tsBtn) tsBtn.classList.remove('ts-on');
+        const prioRow = document.getElementById('dayTodoPrioRow');
+        if (prioRow) { prioRow.classList.remove('visible'); prioRow.querySelectorAll('.task-prio-btn').forEach(b => b.classList.remove('active')); }
+        if (document.getElementById('dayTodoDeadline')) document.getElementById('dayTodoDeadline').value = '';
         if (document.getElementById('dayTodoAssignee')) document.getElementById('dayTodoAssignee').value = '';
         if (document.getElementById('dayTodoProject'))  document.getElementById('dayTodoProject').value  = '';
         dayTodoAddRow.style.display = 'none';
